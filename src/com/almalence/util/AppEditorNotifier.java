@@ -31,11 +31,13 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 //<!-- -+-
+import com.almalence.opencam.ApplicationScreen;
 import com.almalence.opencam.MainScreen;
 import com.almalence.opencam.R;
 
 //-+- -->
 /* <!-- +++
+ import com.almalence.opencam_plus.ApplicationScreen;
  import com.almalence.opencam_plus.MainScreen;
  import com.almalence.opencam_plus.R;
  +++ --> */
@@ -44,15 +46,8 @@ public class AppEditorNotifier
 {
 	private static int	DAYS_UNTIL_PROMPT	= 10;
 
-	// private static final int LAUNCHES_UNTIL_PROMPT = 30;
-
 	public static void app_launched(Activity mContext)
 	{
-		SharedPreferences prefs = mContext.getSharedPreferences("appeditornotifier", 0);
-		// if (prefs.getBoolean("showlatereditornotifier", false))
-		// {
-		// return;
-		// }
 	}
 
 	public static final boolean isABCEditorInstalled(Activity activity)
@@ -72,14 +67,12 @@ public class AppEditorNotifier
 	{
 		final SharedPreferences prefs = mContext.getSharedPreferences("appeditornotifier", 0);
 		// check if installed
-		if (isABCEditorInstalled(MainScreen.getInstance()))
+		if (isABCEditorInstalled(ApplicationScreen.instance))
 		{
-			// prefs.edit().putBoolean("showlatereditornotifier",
-			// true).commit();
 			return false;
 		}
 		
-		DAYS_UNTIL_PROMPT = prefs.getInt("days_until_prompt", 4);
+		DAYS_UNTIL_PROMPT = prefs.getInt("days_until_prompt", 10);
 		Long date_firstLaunch = prefs.getLong("date_firstlaunch_editornotifier", 0);
 		if (date_firstLaunch == 0)
 		{
@@ -89,33 +82,12 @@ public class AppEditorNotifier
 			return true;
 		}
 
-		if (prefs.getBoolean("dontshowagainEditornotifier", false) || System.currentTimeMillis() < date_firstLaunch + (DAYS_UNTIL_PROMPT * 24 * 60 * 60 * 1000))
+		if (System.currentTimeMillis() < date_firstLaunch + Long.valueOf((long)DAYS_UNTIL_PROMPT * 24 * 60 * 60 * 1000))
 		{
-			// showEditorNotifierDialog(mContext, prefs);
-			MainScreen.getInstance().guiManager.openGallery(true);
+			ApplicationScreen.instance.guiManager.openGallery(true);
 			return true;
 		}
 
-		// if (prefs.getBoolean("showlatereditornotifier", false))
-		// {
-		// return false;
-		// }
-
-		// final long launch_count =
-		// prefs.getLong("launch_count_editornotifier", 0) + 1;
-		// final Long date_firstLaunch =
-		// prefs.getLong("date_firstlaunch_editornotifier", 0);
-		//
-		// if (launch_count >= LAUNCHES_UNTIL_PROMPT)
-		// {
-		// if (System.currentTimeMillis() >= date_firstLaunch +
-		// (DAYS_UNTIL_PROMPT * 24 * 60 * 60 * 1000))
-		// {
-		// showEditorNotifierDialog(mContext, prefs);
-		//
-		// return true;
-		// }
-		// }
 		showEditorNotifierDialog(mContext, prefs);
 		return true;
 	}
@@ -133,17 +105,17 @@ public class AppEditorNotifier
 		ll.addView(img);
 
 		TextView tv = new TextView(mContext);
-		tv.setText(MainScreen.getAppResources().getString(R.string.editorAdvText));
+		tv.setText(ApplicationScreen.getAppResources().getString(R.string.editorAdvText));
 		tv.setWidth((int) (250 * density));
 		tv.setPadding((int) (4 * density), 0, (int) (4 * density), (int) (24 * density));
 		ll.addView(tv);
 
 		Button bInstall = new Button(mContext);
-		bInstall.setText(MainScreen.getAppResources().getString(R.string.editorInstallText));
+		bInstall.setText(ApplicationScreen.getAppResources().getString(R.string.editorInstallText));
 		ll.addView(bInstall);
 
 		Button bLater = new Button(mContext);
-		bLater.setText(MainScreen.getAppResources().getString(R.string.editorNoText));
+		bLater.setText(ApplicationScreen.getAppResources().getString(R.string.editorNoText));
 		ll.addView(bLater);
 
 		final AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
@@ -154,7 +126,7 @@ public class AppEditorNotifier
 			@Override
 			public void onCancel(DialogInterface dialog)
 			{
-				MainScreen.getInstance().guiManager.openGallery(true);
+				ApplicationScreen.instance.guiManager.openGallery(true);
 			}
 		});
 
@@ -163,6 +135,7 @@ public class AppEditorNotifier
 			public void onClick(View v)
 			{
 				MainScreen.callStoreInstall(mContext, "com.almalence.opencameditor");
+				prefs.edit().putInt("days_until_prompt", 999).commit();
 				dialog.dismiss();
 			}
 		});
@@ -171,23 +144,13 @@ public class AppEditorNotifier
 		{
 			public void onClick(View v)
 			{
-				// if (prefs != null)
-				// prefs.edit().putBoolean("showlatereditornotifier",
-				// true).commit();
-
 				dialog.dismiss();
-				MainScreen.getInstance().guiManager.openGallery(true);
+				ApplicationScreen.instance.guiManager.openGallery(true);
 
-				if (DAYS_UNTIL_PROMPT == 4)
-					DAYS_UNTIL_PROMPT = 5;
-				else if (DAYS_UNTIL_PROMPT == 5)
-					DAYS_UNTIL_PROMPT = 10;
-				else if (DAYS_UNTIL_PROMPT == 10)
+				if (DAYS_UNTIL_PROMPT <= 10)
 					DAYS_UNTIL_PROMPT = 30;
 				else if (DAYS_UNTIL_PROMPT == 30)
 					DAYS_UNTIL_PROMPT = 999;
-				else
-					prefs.edit().putBoolean("dontshowagainEditornotifier", false).commit();
 
 				prefs.edit().putInt("days_until_prompt", DAYS_UNTIL_PROMPT).commit();
 			}

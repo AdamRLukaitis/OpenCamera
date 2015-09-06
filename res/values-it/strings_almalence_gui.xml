@@ -14,8 +14,8 @@
     <string name="Pref_Common_HWShutter_Summary">Usa l\'otturatore fisico per avviare l\'applicazione</string>
     <string name="Pref_Common_ShotOnTap_Title">Tocca per scattare</string>
     <string name="Pref_Common_ShotOnTap_Summary">Metti a fuoco e scatta toccando</string>
-    <string name="Pref_Common_UseHALv3_Title">Usa l\'interfaccia di Сamera2</string>
-    <string name="Pref_Common_UseHALv3_Summary">Modalità sperimentale. Funziona su un numero limitato di dispositivi (Google Nexus 5, 7 con Android L)</string>    
+    <string name="Pref_Common_UseCamera2_Title">Usa l\'interfaccia di Сamera2</string>
+    <string name="Pref_Common_UseCamera2_Summary">Modalità sperimentale. Funziona su un numero limitato di dispositivi (Google Nexus 5, 7 con Android L)</string>    
     <string name="Pref_Common_MediaRescan_Title">Ripetizione scansione dei file multimediali all\'uscita</string>
     <string name="Pref_Common_MediaRescan_Summary">È utile quando le immagini non compaiono in galleria.</string>
     <string name="Pref_Common_Gallery_Title">Consenti la selezione della galleria esterna</string>
@@ -35,7 +35,7 @@
     <string name="Pref_SaveConfiguration_DelayedCapture_Title">Autoscatto</string>
     <string name="Pref_SaveConfiguration_ExpoCompensation_Title">Compensazione esposizione</string>
     <string name="Pref_Common_DelayedCapture_Title">Acquisizione con autoscatto</string>
-    <string name="Pref_Common_DelayedCapture_Summary">Mostra comando Autoscatto</string>
+    <string name="Pref_Common_DelayedCapture_Summary">Mostra comando Autoscatto/photo timelapse</string>
     <string name="Pref_ShowHelp_Title">Mostra la guida</string>
     <string name="Pref_WhowHelp_Summary">Mostra la guida all\'avvio della modalità (Foto panoramiche, Rimozione di oggetti, Sequenza, Foto di gruppo)</string>
     <string name="Pref_Common_HeadsetTap_Title">Cuffie come otturatore</string>
@@ -92,5 +92,7 @@
 	<string name="okText">OK</string>
 	
 	<string name="moreText">Altro...</string>
+	
+	<string name="promoRedeemedJulius">Foto sblocco in Modalità orizzontale e Multishot.</string>
 	
 </resources>

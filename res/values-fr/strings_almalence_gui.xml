@@ -14,8 +14,8 @@
     <string name="Pref_Common_HWShutter_Summary">Utiliser l\'obturateur de l\'appareil pour démarrer l\'application</string>
     <string name="Pref_Common_ShotOnTap_Title">Appuyer pour prendre la photo</string>
     <string name="Pref_Common_ShotOnTap_Summary">Effectuez la mise au point et appuyez pour prendre une photo</string>
-    <string name="Pref_Common_UseHALv3_Title">Utiliser l\'interface Сamera2</string>
-    <string name="Pref_Common_UseHALv3_Summary">Mode expérimental. Fonctionnera sur un nombre limité d\'appareils (Google Nexus 5, 7 avec Android L)</string>    
+    <string name="Pref_Common_UseCamera2_Title">Utiliser l\'interface Сamera2</string>
+    <string name="Pref_Common_UseCamera2_Summary">Mode expérimental. Fonctionnera sur un nombre limité d\'appareils (Google Nexus 5, 7 avec Android L)</string>    
     <string name="Pref_Common_MediaRescan_Title">Relance de l\'analyse des fichiers média en quittant</string>
     <string name="Pref_Common_MediaRescan_Summary">Aide si les images n\'apparaissent pas dans la galerie.</string>
     <string name="Pref_Common_Gallery_Title">Autoriser la sélection de la galerie externe.</string>
@@ -35,7 +35,7 @@
     <string name="Pref_SaveConfiguration_DelayedCapture_Title">Retardateur</string>
     <string name="Pref_SaveConfiguration_ExpoCompensation_Title">Correction d\'exposition</string>
     <string name="Pref_Common_DelayedCapture_Title">Prise de vue avec retardateur</string>
-    <string name="Pref_Common_DelayedCapture_Summary">Affiche la commande du retardateur</string>
+    <string name="Pref_Common_DelayedCapture_Summary">Affiche la commande du retardateur/photo timelapse</string>
     <string name="Pref_ShowHelp_Title">Affiche l\'aide</string>
     <string name="Pref_WhowHelp_Summary">Affiche l\'aide au démarrage du mode (Panorama, Suppression d\'objet, Séquence, Photo de groupe)</string>
     <string name="Pref_Common_HeadsetTap_Title">Obturateur du casque</string>

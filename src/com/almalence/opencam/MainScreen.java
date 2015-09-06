@@ -21,7 +21,6 @@ by Almalence Inc. All Rights Reserved.
  +++ --> */
 // <!-- -+-
 package com.almalence.opencam;
-
 //-+- -->
 
 import java.io.File;
@@ -32,6 +31,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.onepf.oms.OpenIabHelper;
@@ -48,44 +48,35 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
-import android.content.pm.ActivityInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.Point;
-import android.graphics.Rect;
-import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
-import android.hardware.Camera.Area;
 import android.media.AudioManager;
 import android.media.CamcorderProfile;
 import android.media.ImageReader;
 import android.media.MediaPlayer;
 import android.net.Uri;
-import android.opengl.GLSurfaceView;
+import android.nfc.NfcAdapter;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Debug;
 import android.os.Environment;
-import android.os.Handler;
-import android.os.Message;
-import android.os.StatFs;
 import android.preference.CheckBoxPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
-import android.provider.MediaStore;
-import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Pair;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.KeyEvent;
-import android.view.MotionEvent;
-import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -104,21 +95,20 @@ import android.widget.Toast;
 
 import com.almalence.plugins.capture.panoramaaugmented.PanoramaAugmentedCapturePlugin;
 import com.almalence.plugins.capture.video.VideoCapturePlugin;
+import com.almalence.sony.cameraremote.SimpleStreamSurfaceView;
+import com.almalence.sony.cameraremote.utils.NFCHandler;
+import com.almalence.sony.cameraremote.utils.WifiHandler;
 import com.almalence.util.AppWidgetNotifier;
-import com.almalence.util.Util;
 
 //<!-- -+-
 import com.almalence.opencam.cameracontroller.CameraController;
-//import com.almalence.opencam.cameracontroller.HALv3;
 import com.almalence.opencam.ui.AlmalenceGUI;
 import com.almalence.opencam.ui.GLLayer;
 import com.almalence.opencam.ui.GUI;
 import com.almalence.util.AppRater;
-
 //-+- -->
 /* <!-- +++
  import com.almalence.opencam_plus.cameracontroller.CameraController;
- //import com.almalence.opencam_plus.cameracontroller.HALv3;
  import com.almalence.opencam_plus.ui.AlmalenceGUI;
  import com.almalence.opencam_plus.ui.GLLayer;
  import com.almalence.opencam_plus.ui.GUI;
@@ -131,8 +121,7 @@ import com.almalence.util.AppRater;
  ***/
 
 @SuppressWarnings("deprecation")
-public class MainScreen extends Activity implements ApplicationInterface, View.OnClickListener, View.OnTouchListener,
-		SurfaceHolder.Callback, Handler.Callback, Camera.ShutterCallback
+public class MainScreen extends ApplicationScreen
 {
 	// >>Description
 	// section with different global parameters available for everyone
@@ -143,85 +132,35 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	//
 	// Description<<
 
-	private static final int			MSG_RETURN_CAPTURED				= -1;
+	private static final int	MODE_GENERAL					= 0;
+	private static final int	MODE_SMART_MULTISHOT_AND_NIGHT	= 1;
+	private static final int	MODE_PANORAMA					= 2;
+	private static final int	MODE_VIDEO						= 3;
 
-	private static final int			MODE_GENERAL					= 0;
-	private static final int			MODE_SMART_MULTISHOT_AND_NIGHT	= 1;
-	private static final int			MODE_PANORAMA					= 2;
-	private static final int			MODE_VIDEO						= 3;
+	private static final int	MIN_MPIX_SUPPORTED				= 1280 * 960;
+	private static final int	MIN_MPIX_PREVIEW				= 600 * 400;
 
-	private static final int			MIN_MPIX_SUPPORTED				= 1280 * 960;
-	private static final int			MIN_MPIX_PREVIEW				= 600 * 400;
-	private static final long			MPIX_8							= 3504 * 2336;
+	public static MainScreen	thiz;
 
-	public static MainScreen			thiz;
-	public Context						mainContext;
-	private Handler						messageHandler;
+	// Interface to Camera2 camera and Old style camera
 
-	// Interface to HALv3 camera and Old style camera
-	private CameraController			cameraController				= null;
-
-	// HALv3 camera's objects
-	private ImageReader					mImageReaderPreviewYUV;
-	private ImageReader					mImageReaderYUV;
-	private ImageReader					mImageReaderJPEG;
-	private ImageReader					mImageReaderRAW;
-
-	private int							captureFormat					= CameraController.JPEG;
-
-	public GUI							guiManager						= null;
-
-	// OpenGL layer. May be used to allow capture plugins to draw overlaying
-	// preview, such as night vision or panorama frames.
-	private GLLayer						glView;
-
-	private boolean						mPausing						= false;
-
-	private File						forceFilename					= null;
-	private Uri							forceFilenameUri;
-
-	private SurfaceHolder				surfaceHolder;
-	private SurfaceView					preview;
-	private Surface						mCameraSurface					= null;
-	private OrientationEventListener	orientListener;
-	private boolean						landscapeIsNormal				= false;
-	private boolean						surfaceCreated					= false;
-	
-	private int							surfaceWidth                    = 0;
-	private int							surfaceHeight                    = 0;
-
-	// shared between activities
-//	private int							imageWidth, imageHeight;
-	private int							previewWidth, previewHeight;
-
-	private CountDownTimer				screenTimer						= null;
-	private boolean						isScreenTimerRunning			= false;
-
-	private static boolean				wantLandscapePhoto				= false;
-	private int							orientationMain					= 0;
-	private int							orientationMainPrevious			= 0;
-
-	private SoundPlayer					shutterPlayer					= null;
+	// Camera2 camera's objects
+	private ImageReader			mImageReaderPreviewYUV;
+	private ImageReader			mImageReaderYUV;
+	private ImageReader			mImageReaderJPEG;
+	private ImageReader			mImageReaderRAW;
 
 	// Common preferences
-	private String						imageSizeIdxPreference;
-	private String						multishotImageSizeIdxPreference;
-	private boolean						shutterPreference				= true;
-	private boolean						shotOnTapPreference				= false;
+	private int					imageSizeIdxPreference;
+	private int					multishotImageSizeIdxPreference;
+	private boolean				shutterPreference				= true;
+	private int					shotOnTapPreference				= 0;
 
-	private boolean						showHelp						= false;
+	private boolean				showHelp						= false;
 
-	private boolean						keepScreenOn					= false;
+	// private boolean keepScreenOn = false;
 
-	private String						saveToPath;
-	private String						saveToPreference;
-	private boolean						sortByDataPreference;
-	
-	private boolean						captureRAW;
-
-	private static boolean				maxScreenBrightnessPreference;
-
-	private static boolean				mAFLocked						= false;
+	private static boolean		maxScreenBrightnessPreference;
 
 	// >>Description
 	// section with initialize, resume, start, stop procedures, preferences
@@ -233,119 +172,98 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	//
 	// Description<<
 
-	private static boolean				isCreating						= false;
-	private static boolean				mApplicationStarted				= false;
-	private static boolean				mCameraStarted					= false;
-
 	// Clicked mode id from widget.
-	public static final String			EXTRA_ITEM						= "WidgetModeID";
+	public static final String	EXTRA_ITEM						= "WidgetModeID";
 
-	public static final String			EXTRA_TORCH						= "WidgetTorchMode";
-	public static final String			EXTRA_BARCODE					= "WidgetBarcodeMode";
-	public static final String			EXTRA_SHOP						= "WidgetGoShopping";
+	public static final String	EXTRA_TORCH						= "WidgetTorchMode";
+	public static final String	EXTRA_BARCODE					= "WidgetBarcodeMode";
+	public static final String	EXTRA_SHOP						= "WidgetGoShopping";
 
-	private static boolean				launchTorch						= false;
-	private static boolean				launchBarcode					= false;
-	private static boolean				goShopping						= false;
+	private static boolean		launchTorch						= false;
+	private static boolean		launchBarcode					= false;
+	private static boolean		goShopping						= false;
 
-	private static int					prefFlash						= -1;
-	private static boolean				prefBarcode						= false;
+	private static int			prefFlash						= -1;
+	private static boolean		prefBarcode						= false;
 
-	private static final int			VOLUME_FUNC_SHUTTER				= 0;
-	private static final int			VOLUME_FUNC_EXPO				= 2;
-	private static final int			VOLUME_FUNC_NONE				= 3;
+	private static final int	VOLUME_FUNC_SHUTTER				= 0;
+	private static final int	VOLUME_FUNC_EXPO				= 2;
+	private static final int	VOLUME_FUNC_NONE				= 3;
 
-	private static List<Area>			mMeteringAreaMatrix5			= new ArrayList<Area>();
-	private static List<Area>			mMeteringAreaMatrix4			= new ArrayList<Area>();
-	private static List<Area>			mMeteringAreaMatrix1			= new ArrayList<Area>();
-	private static List<Area>			mMeteringAreaCenter				= new ArrayList<Area>();
-	private static List<Area>			mMeteringAreaSpot				= new ArrayList<Area>();
+	public static String		sKeepScreenOn;
+	public static String		sFastSwitchShutterOn;
 
-	private int							currentMeteringMode				= -1;
+	public static String		sDelayedCapturePref;
+	public static String		sShowDelayedCapturePref;
+	public static String		sDelayedSoundPref;
+	public static String		sDelayedFlashPref;
+	public static String		sDelayedCaptureIntervalPref;
 
-	public static String				sTimestampDate;
-	public static String				sTimestampAbbreviation;
-	public static String				sTimestampTime;
-	public static String				sTimestampSeparator;
-	public static String				sTimestampCustomText;
-	public static String				sTimestampColor;
-	public static String				sTimestampFontSize;
+	public static String		sPhotoTimeLapseCaptureIntervalPref;
+	public static String		sPhotoTimeLapseCaptureIntervalMeasurmentPref;
+	public static String		sPhotoTimeLapseActivePref;
+	public static String		sPhotoTimeLapseIsRunningPref;
+	public static String		sPhotoTimeLapseCount;
 
-	public static String				sEvPref;
-	public static String				sSceneModePref;
-	public static String				sWBModePref;
-	public static String				sFrontFocusModePref;
-	public static String				sRearFocusModePref;
-	public static String				sFlashModePref;
-	public static String				sISOPref;
-	public static String				sMeteringModePref;
+	private static String		sShutterPref;
+	private static String		sShotOnTapPref;
+	private static String		sVolumeButtonPref;
 
-	public static String				sDelayedCapturePref;
-	public static String				sShowDelayedCapturePref;
-	public static String				sDelayedSoundPref;
-	public static String				sDelayedFlashPref;
-	public static String				sDelayedCaptureIntervalPref;
+	public static String		sSonyCamerasPref;
+	public static String		sDefaultInfoSetPref;
+	public static String		sSWCheckedPref;
+	public static String		sSavePathPref;
+	public static String		sExportNamePref;
+	public static String		sExportNamePrefixPref;
+	public static String		sExportNamePostfixPref;
+	public static String		sSaveToPref;
 	
-	public static String				sPhotoTimeLapseCaptureIntervalPref;
-	public static String				sPhotoTimeLapseCaptureIntervalMeasurmentPref;
-	public static String				sPhotoTimeLapseActivePref;
-	public static String				sPhotoTimeLapseIsRunningPref;
-	public static String				sPhotoTimeLapseCount;
+	public static String		sLastPhotoModePref;
 
-	public static String				sUseFrontCameraPref;
-	private static String				sShutterPref;
-	private static String				sShotOnTapPref;
-	private static String				sVolumeButtonPref;
+	// Camera parameters info
+	int							cameraId;
+	List<CameraController.Size>	preview_sizes;
+	List<CameraController.Size>	video_sizes;
+	List<CameraController.Size>	picture_sizes;
+	boolean						supports_video_stabilization;
+	List<String>				flash_values;
+	List<String>				focus_values;
+	List<String>				scene_modes_values;
+	List<String>				white_balances_values;
+	List<String>				isos;
+	String						flattenParamteters;
 
-	public static String				sImageSizeRearPref;
-	public static String				sImageSizeFrontPref;
+	private NfcAdapter			mNfcAdapter;
+	private WifiHandler			mWifiHandler;
 
-	public static String				sImageSizeMultishotBackPref;
-	public static String				sImageSizeMultishotFrontPref;
+	protected void createPluginManager()
+	{
+		pluginManager = PluginManager.getInstance();
+	}
 
-	public static String				sImageSizePanoramaBackPref;
-	public static String				sImageSizePanoramaFrontPref;
-
-	public static String				sImageSizeVideoBackPref;
-	public static String				sImageSizeVideoFrontPref;
-	
-	public static String				sCaptureRAWPref;
-
-	public static String				sJPEGQualityPref;
-
-	public static String				sDefaultInfoSetPref;
-	public static String				sSWCheckedPref;
-	public static String				sSavePathPref;
-	public static String				sExportNamePref;
-	public static String				sExportNamePrefixPref;
-	public static String				sExportNamePostfixPref;
-	public static String				sSaveToPref;
-	public static String				sSortByDataPref;
-	public static String				sEnableExifOrientationTagPref;
-	public static String				sAdditionalRotationPref;
-
-	public static String				sExpoPreviewModePref;
-
-	public static String				sDefaultModeName;
-
-	public static int					sDefaultValue					= CameraParameters.SCENE_MODE_AUTO;
-	public static int					sDefaultFocusValue				= CameraParameters.AF_MODE_CONTINUOUS_PICTURE;
-	public static int					sDefaultFlashValue				= CameraParameters.FLASH_MODE_OFF;
-	public static int					sDefaultMeteringValue			= CameraParameters.meteringModeAuto;
+	/*
+	 * Try to catch NFC intent
+	 */
+	@Override
+	protected void onNewIntent(Intent intent)
+	{
+		try
+		{
+			Pair<String, String> cameraWifiSettings = NFCHandler.parseIntent(intent);
+			mWifiHandler.createIfNeededThenConnectToWifi(cameraWifiSettings.first, cameraWifiSettings.second);
+		} catch (Exception e)
+		{
+			e.printStackTrace();
+		}
+	}
 
 	@Override
-	public void onCreate(Bundle savedInstanceState)
+	protected void duringOnCreate()
 	{
-		super.onCreate(savedInstanceState);
+		thiz = this;
 
-		sEvPref = getResources().getString(R.string.Preference_EvCompensationValue);
-		sSceneModePref = getResources().getString(R.string.Preference_SceneModeValue);
-		sWBModePref = getResources().getString(R.string.Preference_WBModeValue);
-		sFrontFocusModePref = getResources().getString(R.string.Preference_FrontFocusModeValue);
-		sRearFocusModePref = getResources().getString(R.string.Preference_RearFocusModeValue);
-		sFlashModePref = getResources().getString(R.string.Preference_FlashModeValue);
-		sISOPref = getResources().getString(R.string.Preference_ISOValue);
-		sMeteringModePref = getResources().getString(R.string.Preference_MeteringModeValue);
+		mApplicationStarted = false;
+		isForceClose = false;
 
 		sDelayedCapturePref = getResources().getString(R.string.Preference_DelayedCaptureValue);
 		sShowDelayedCapturePref = getResources().getString(R.string.Preference_ShowDelayedCaptureValue);
@@ -358,86 +276,48 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		sDelayedSoundPref = getResources().getString(R.string.Preference_DelayedSoundValue);
 		sDelayedFlashPref = getResources().getString(R.string.Preference_DelayedFlashValue);
 		sDelayedCaptureIntervalPref = getResources().getString(R.string.Preference_DelayedCaptureIntervalValue);
-		
-		sPhotoTimeLapseCaptureIntervalPref = getResources().getString(R.string.Preference_PhotoTimeLapseCaptureInterval);
-		sPhotoTimeLapseCaptureIntervalMeasurmentPref = getResources().getString(R.string.Preference_PhotoTimeLapseCaptureIntervalMeasurment);
+
+		sPhotoTimeLapseCaptureIntervalPref = getResources()
+				.getString(R.string.Preference_PhotoTimeLapseCaptureInterval);
+		sPhotoTimeLapseCaptureIntervalMeasurmentPref = getResources().getString(
+				R.string.Preference_PhotoTimeLapseCaptureIntervalMeasurment);
 		sPhotoTimeLapseActivePref = getResources().getString(R.string.Preference_PhotoTimeLapseSWChecked);
 		sPhotoTimeLapseIsRunningPref = getResources().getString(R.string.Preference_PhotoTimeLapseIsRunning);
 		sPhotoTimeLapseCount = getResources().getString(R.string.Preference_PhotoTimeLapseCount);
-		
-		sUseFrontCameraPref = getResources().getString(R.string.Preference_UseFrontCameraValue);
+
 		sShutterPref = getResources().getString(R.string.Preference_ShutterCommonValue);
+		sSonyCamerasPref = getResources().getString(R.string.Preference_ConnectToSonyCameras);
 		sShotOnTapPref = getResources().getString(R.string.Preference_ShotOnTapValue);
 		sVolumeButtonPref = getResources().getString(R.string.Preference_VolumeButtonValue);
 
-		sImageSizeRearPref = getResources().getString(R.string.Preference_ImageSizeRearValue);
-		sImageSizeFrontPref = getResources().getString(R.string.Preference_ImageSizeFrontValue);
-
-		sImageSizeMultishotBackPref = getResources()
-				.getString(R.string.Preference_ImageSizePrefSmartMultishotBackValue);
-		sImageSizeMultishotFrontPref = getResources().getString(
-				R.string.Preference_ImageSizePrefSmartMultishotFrontValue);
-
-		sImageSizePanoramaBackPref = getResources().getString(R.string.Preference_ImageSizePrefPanoramaBackValue);
-		sImageSizePanoramaFrontPref = getResources().getString(R.string.Preference_ImageSizePrefPanoramaFrontValue);
-
-		sImageSizeVideoBackPref = getResources().getString(R.string.Preference_ImageSizePrefVideoBackValue);
-		sImageSizeVideoFrontPref = getResources().getString(R.string.Preference_ImageSizePrefVideoFrontValue);
-
-		sCaptureRAWPref = getResources().getString(R.string.Preference_CaptureRAWValue);
-		
-		sJPEGQualityPref = getResources().getString(R.string.Preference_JPEGQualityCommonValue);
-
 		sDefaultInfoSetPref = getResources().getString(R.string.Preference_DefaultInfoSetValue);
 		sSWCheckedPref = getResources().getString(R.string.Preference_SWCheckedValue);
-		sSavePathPref = getResources().getString(R.string.Preference_SavePathValue);
+
 		sExportNamePref = getResources().getString(R.string.Preference_ExportNameValue);
 		sExportNamePrefixPref = getResources().getString(R.string.Preference_SavePathPrefixValue);
 		sExportNamePostfixPref = getResources().getString(R.string.Preference_SavePathPostfixValue);
-		sSaveToPref = getResources().getString(R.string.Preference_SaveToValue);
 		sSortByDataPref = getResources().getString(R.string.Preference_SortByDataValue);
 		sEnableExifOrientationTagPref = getResources().getString(R.string.Preference_EnableExifTagOrientationValue);
 		sAdditionalRotationPref = getResources().getString(R.string.Preference_AdditionalRotationValue);
 
-		sTimestampDate = getResources().getString(R.string.Preference_TimestampDateValue);
-		sTimestampAbbreviation = getResources().getString(R.string.Preference_TimestampAbbreviationValue);
-		sTimestampTime = getResources().getString(R.string.Preference_TimestampTimeValue);
-		sTimestampSeparator = getResources().getString(R.string.Preference_TimestampSeparatorValue);
-		sTimestampCustomText = getResources().getString(R.string.Preference_TimestampCustomTextValue);
-		sTimestampColor = getResources().getString(R.string.Preference_TimestampColorValue);
-		sTimestampFontSize = getResources().getString(R.string.Preference_TimestampFontSizeValue);
-
-		sExpoPreviewModePref = getResources().getString(R.string.Preference_ExpoBracketingPreviewModePref);
-
-		sDefaultModeName = getResources().getString(R.string.Preference_DefaultModeName);
+		sKeepScreenOn = getResources().getString(R.string.Preference_KeepScreenOnValue);
+		sFastSwitchShutterOn = getResources().getString(R.string.Preference_ShowFastSwitchShutterValue);
+		
+		sSavePathPref = getResources().getString(R.string.Preference_SavePathValue);
+		sSaveToPref = getResources().getString(R.string.Preference_SaveToValue);
+		
+		sLastPhotoModePref = getResources().getString(R.string.Preference_LastPhotoModeValue);
 
 		Intent intent = this.getIntent();
 		String mode = intent.getStringExtra(EXTRA_ITEM);
 		launchTorch = intent.getBooleanExtra(EXTRA_TORCH, false);
 		launchBarcode = intent.getBooleanExtra(EXTRA_BARCODE, false);
-		goShopping = intent.getBooleanExtra(EXTRA_SHOP, false);
-
-		mainContext = this.getBaseContext();
-		messageHandler = new Handler(this);
-		thiz = this;
-
-		mApplicationStarted = false;
-
-		requestWindowFeature(Window.FEATURE_NO_TITLE);
-		// ensure landscape orientation
-		setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-		// set to fullscreen
-		getWindow().addFlags(
-				WindowManager.LayoutParams.FLAG_FULLSCREEN | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
-						| WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
-
-		// set some common view here
-		setContentView(R.layout.opencamera_main_layout);
 
 		// reset or save settings
 		resetOrSaveSettings();
 
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
+		SavingService.initSavingPrefs(getApplicationContext());
 
 		if (null != mode)
 			prefs.edit().putString("defaultModeName", mode).commit();
@@ -482,7 +362,8 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			unlockAllSubscriptionYear = prefs.getBoolean("subscription_unlock_all_year", false);
 		}
 
-		createBillingHandler();
+		if (!unlockAllPurchased)
+			createBillingHandler();
 
 		/**** Billing *****/
 
@@ -492,139 +373,33 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 
 		AppWidgetNotifier.app_launched(this);
 
-		try
-		{
-			cameraController = CameraController.getInstance();
-		} catch (VerifyError exp)
-		{
-			Log.e("MainScreen", exp.getMessage());
-		}
-		CameraController.onCreate(MainScreen.thiz, MainScreen.thiz, PluginManager.getInstance());
+		keepScreenOn = prefs.getBoolean(sKeepScreenOn, false);
 
-		keepScreenOn = prefs.getBoolean("keepScreenOn", false);
+		mNfcAdapter = NfcAdapter.getDefaultAdapter(this);
+		mWifiHandler = new WifiHandler(this);
+	}
 
-		// set preview, on click listener and surface buffers
-		preview = (SurfaceView) this.findViewById(R.id.SurfaceView01);
-		preview.setOnClickListener(this);
-		preview.setOnTouchListener(this);
-		preview.setKeepScreenOn(keepScreenOn);
-
-		surfaceHolder = preview.getHolder();
-		surfaceHolder.setFixedSize(1280, 720);
-		surfaceHolder.addCallback(this);
-
-		orientListener = new OrientationEventListener(this)
-		{
-			@Override
-			public void onOrientationChanged(int orientation)
-			{
-				// figure landscape or portrait
-				if (MainScreen.thiz.landscapeIsNormal)
-				{
-					orientation += 90;
-				}
-
-				if ((orientation < 45) || (orientation > 315 && orientation < 405)
-						|| ((orientation > 135) && (orientation < 225)))
-				{
-					if (MainScreen.wantLandscapePhoto)
-					{
-						MainScreen.wantLandscapePhoto = false;
-					}
-				} else
-				{
-					if (!MainScreen.wantLandscapePhoto)
-					{
-						MainScreen.wantLandscapePhoto = true;
-					}
-				}
-
-				// orient properly for video
-				if ((orientation > 135) && (orientation < 225))
-					orientationMain = 270;
-				else if ((orientation < 45) || (orientation > 315))
-					orientationMain = 90;
-				else if ((orientation < 325) && (orientation > 225))
-					orientationMain = 0;
-				else if ((orientation < 135) && (orientation > 45))
-					orientationMain = 180;
-
-				if (orientationMain != orientationMainPrevious)
-				{
-					orientationMainPrevious = orientationMain;
-				}
-			}
-		};
-
-		// prevent power drain
-		screenTimer = new CountDownTimer(180000, 180000)
-		{
-			public void onTick(long millisUntilFinished)
-			{
-				// Not used
-			}
-
-			public void onFinish()
-			{
-				boolean isVideoRecording = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext())
-						.getBoolean("videorecording", false);
-				if (isVideoRecording || keepScreenOn)
-				{
-					// restart timer
-					screenTimer.start();
-					isScreenTimerRunning = true;
-					preview.setKeepScreenOn(true);
-					return;
-				}
-				preview.setKeepScreenOn(keepScreenOn);
-				isScreenTimerRunning = false;
-			}
-		};
-		screenTimer.start();
-		isScreenTimerRunning = true;
-
+	@Override
+	protected void afterOnCreate()
+	{
 		PluginManager.getInstance().setupDefaultMode();
 		// init gui manager
 		guiManager = new AlmalenceGUI();
-		guiManager.createInitialGUI();
-		this.findViewById(R.id.mainLayout1).invalidate();
-		this.findViewById(R.id.mainLayout1).requestLayout();
-		guiManager.onCreate();
+//		guiManager.createInitialGUI();
+//		this.findViewById(R.id.mainLayout1).invalidate();
+//		this.findViewById(R.id.mainLayout1).requestLayout();
+//		guiManager.onCreate();
 
 		// init plugin manager
 		PluginManager.getInstance().onCreate();
 
-		if (this.getIntent().getAction() != null)
-		{
-			if (this.getIntent().getAction().equals(MediaStore.ACTION_IMAGE_CAPTURE))
-			{
-				try
-				{
-					forceFilenameUri = this.getIntent().getExtras().getParcelable(MediaStore.EXTRA_OUTPUT);
-					MainScreen.setForceFilename(new File(((Uri) forceFilenameUri).getPath()));
-					if (MainScreen.getForceFilename().getAbsolutePath().equals("/scrapSpace"))
-					{
-						MainScreen.setForceFilename(new File(Environment.getExternalStorageDirectory()
-								.getAbsolutePath() + "/mms/scrapSpace/.temp.jpg"));
-						new File(MainScreen.getForceFilename().getParent()).mkdirs();
-					}
-				} catch (Exception e)
-				{
-					MainScreen.setForceFilename(null);
-				}
-			} else
-			{
-				MainScreen.setForceFilename(null);
-			}
-		} else
-		{
-			MainScreen.setForceFilename(null);
-		}
+		Intent intent = this.getIntent();
+		goShopping = intent.getBooleanExtra(EXTRA_SHOP, false);
 
 		// <!-- -+-
 		if (goShopping)
 		{
-			if (MainScreen.thiz.titleUnlockAll == null || MainScreen.thiz.titleUnlockAll.endsWith("check for sale"))
+			if (titleUnlockAll == null || titleUnlockAll.endsWith("check for sale"))
 			{
 				Toast.makeText(MainScreen.getMainContext(),
 						"Error connecting to Google Play. Check internet connection.", Toast.LENGTH_LONG).show();
@@ -635,188 +410,210 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		// -+- -->
 	}
 
-	/*
-	 * Get/Set method for private variables
-	 */
 	public static MainScreen getInstance()
 	{
 		return thiz;
 	}
 
-	public static Context getMainContext()
+	public void getCameraParametersBundle()
 	{
-		return thiz.mainContext;
-	}
-
-	public static Handler getMessageHandler()
-	{
-		return thiz.messageHandler;
-	}
-
-	public static CameraController getCameraController()
-	{
-		return thiz.cameraController;
-	}
-
-	public static GUI getGUIManager()
-	{
-		return thiz.guiManager;
-	}
-
-	@TargetApi(21)
-	public static void createImageReaders()
-	{
-		// ImageReader for preview frames in YUV format
-//		thiz.mImageReaderPreviewYUV = ImageReader.newInstance(thiz.previewWidth, thiz.previewHeight,
-//		ImageFormat.YUV_420_888, 2);
-//		 thiz.mImageReaderPreviewYUV = ImageReader.newInstance(1280, 720,
-//		 ImageFormat.YUV_420_888, 2);
-
-		CameraController.Size imageSize = CameraController.getCameraImageSize();
-		// ImageReader for YUV still images
-		thiz.mImageReaderYUV = ImageReader.newInstance(imageSize.getWidth(), imageSize.getHeight(), ImageFormat.YUV_420_888, 1);
-
-		// ImageReader for JPEG still images
-		thiz.mImageReaderJPEG = ImageReader.newInstance(imageSize.getWidth(), imageSize.getHeight(), ImageFormat.JPEG, 1);
-		
-		// ImageReader for RAW still images
-		thiz.mImageReaderRAW = ImageReader.newInstance(imageSize.getWidth(), imageSize.getHeight(), ImageFormat.RAW_SENSOR, 1);
-		
-	}
-
-	public static ImageReader getPreviewYUVImageReader()
-	{
-		return thiz.mImageReaderPreviewYUV;
-	}
-
-	public static ImageReader getYUVImageReader()
-	{
-		return thiz.mImageReaderYUV;
-	}
-
-	public static ImageReader getJPEGImageReader()
-	{
-		return thiz.mImageReaderJPEG;
-	}
-	
-	public static ImageReader getRAWImageReader()
-	{
-		return thiz.mImageReaderRAW;
-	}
-
-	public static int getCaptureFormat()
-	{
-		return thiz.captureFormat;
-	}
-
-	public static void setCaptureFormat(int capture)
-	{
-		thiz.captureFormat = capture;
-	}
-
-	public static File getForceFilename()
-	{
-		return thiz.forceFilename;
-	}
-
-	public static void setForceFilename(File fileName)
-	{
-		thiz.forceFilename = fileName;
-	}
-
-	public static Uri getForceFilenameURI()
-	{
-		return thiz.forceFilenameUri;
-	}
-
-	public static SurfaceHolder getPreviewSurfaceHolder()
-	{
-		return thiz.surfaceHolder;
-	}
-
-	public static SurfaceView getPreviewSurfaceView()
-	{
-		return thiz.preview;
-	}
-	
-	public static void setSurfaceHolderSize(int width, int height)
-	{
-		if(thiz.surfaceHolder != null)
+		try
 		{
-			thiz.surfaceWidth = width;
-			thiz.surfaceHeight = height;
-			thiz.surfaceHolder.setFixedSize(width, height);
-//			thiz.surfaceWidth = 1280;
-//			thiz.surfaceHeight = 720;
-//			thiz.surfaceHolder.setFixedSize(1280, 720);
+			cameraId = CameraController.getCameraIndex();
+			supports_video_stabilization = CameraController.getVideoStabilizationSupported();
+
+			scene_modes_values = CameraController.getSupportedSceneModesNames();
+			white_balances_values = CameraController.getSupportedWhiteBalanceNames();
+			isos = CameraController.getSupportedISONames();
+
+			preview_sizes = CameraController.getSupportedPreviewSizes();
+
+			picture_sizes = CameraController.getSupportedPictureSizes();
+
+			video_sizes = CameraController.getSupportedVideoSizes();
+
+			flash_values = CameraController.getSupportedFlashModesNames();
+			focus_values = CameraController.getSupportedFocusModesNames();
+
+			Camera.Parameters params = CameraController.getCameraParameters();
+			if (params != null)
+			{
+				flattenParamteters = params.flatten();
+			}
+		} catch (Exception e)
+		{
+			e.printStackTrace();
 		}
 	}
 
-	public static int getOrientation()
+	@TargetApi(21)
+	@Override
+	public void createImageReaders(ImageReader.OnImageAvailableListener imageAvailableListener)
 	{
-		return thiz.orientationMain;
+		// ImageReader for preview frames in YUV format
+		mImageReaderPreviewYUV = ImageReader.newInstance(thiz.previewWidth, thiz.previewHeight,
+				ImageFormat.YUV_420_888, 2);
+		
+		CameraController.Size imageSize = CameraController.getCameraImageSize();
+		// ImageReader for YUV still images
+		mImageReaderYUV = ImageReader.newInstance(imageSize.getWidth(), imageSize.getHeight(), ImageFormat.YUV_420_888,
+				2);
+
+		// ImageReader for JPEG still images
+		if (getCaptureFormat() == CameraController.RAW)
+		{
+			CameraController.Size imageSizeJPEG = CameraController.getMaxCameraImageSize(CameraController.JPEG);
+			mImageReaderJPEG = ImageReader.newInstance(imageSizeJPEG.getWidth(), imageSizeJPEG.getHeight(),
+					ImageFormat.JPEG, 2);
+		} else
+			mImageReaderJPEG = ImageReader
+					.newInstance(imageSize.getWidth(), imageSize.getHeight(), ImageFormat.JPEG, 2);
+
+		
+		if(CameraController.isCaptureFormatSupported(CameraController.RAW))
+		{
+			CameraController.Size rawImageSize = CameraController.getMaxCameraImageSize(CameraController.RAW);
+			// ImageReader for RAW still images
+			mImageReaderRAW = ImageReader.newInstance(rawImageSize.getWidth(), rawImageSize.getHeight(), ImageFormat.RAW_SENSOR,
+					3);
+		}
+
+		guiManager.setupViewfinderPreviewSize(new CameraController.Size(thiz.previewWidth, thiz.previewHeight));
+
+		mImageReaderPreviewYUV.setOnImageAvailableListener(imageAvailableListener, null);
+		mImageReaderYUV.setOnImageAvailableListener(imageAvailableListener, null);
+		mImageReaderJPEG.setOnImageAvailableListener(imageAvailableListener, null);
+		if(mImageReaderRAW != null)
+			mImageReaderRAW.setOnImageAvailableListener(imageAvailableListener, null);
 	}
 
-	public static String getImageSizeIndex()
+	@TargetApi(19)
+	@Override
+	public Surface getPreviewYUVImageSurface()
 	{
-		return thiz.imageSizeIdxPreference;
+		return mImageReaderPreviewYUV.getSurface();
 	}
 
-	public static String getMultishotImageSizeIndex()
+	@TargetApi(19)
+	@Override
+	public Surface getYUVImageSurface()
 	{
-		return thiz.multishotImageSizeIdxPreference;
+		return mImageReaderYUV.getSurface();
 	}
 
-	public static boolean isShutterSoundEnabled()
+	@TargetApi(19)
+	@Override
+	public Surface getJPEGImageSurface()
 	{
-		return thiz.shutterPreference;
+		return mImageReaderJPEG.getSurface();
 	}
 
-	public static boolean isShotOnTap()
+	@TargetApi(19)
+	@Override
+	public Surface getRAWImageSurface()
 	{
-		return thiz.shotOnTapPreference;
+		return mImageReaderRAW.getSurface();
+	}
+
+	@Override
+	public SimpleStreamSurfaceView getSimpleStreamSurfaceView()
+	{
+		return (SimpleStreamSurfaceView) preview;
+	}
+
+	@Override
+	public int getImageSizeIndex()
+	{
+		return MainScreen.getInstance().imageSizeIdxPreference;
+	}
+
+	@Override
+	public int getMultishotImageSizeIndex()
+	{
+		return MainScreen.getInstance().multishotImageSizeIdxPreference;
+	}
+
+	@Override
+	public boolean isShutterSoundEnabled()
+	{
+		return shutterPreference;
+	}
+
+	@Override
+	public int isShotOnTap()
+	{
+		return MainScreen.getInstance().shotOnTapPreference;
 	}
 
 	public static boolean isShowHelp()
 	{
-		return thiz.showHelp;
+		return MainScreen.getInstance().showHelp;
 	}
 
 	public static void setShowHelp(boolean show)
 	{
-		thiz.showHelp = show;
-	}
-
-	public static String getSaveToPath()
-	{
-		return thiz.saveToPath;
-	}
-
-	public static String getSaveTo()
-	{
-		return thiz.saveToPreference;
-	}
-
-	public static boolean isSortByData()
-	{
-		return thiz.sortByDataPreference;
-	}
-
-	public static int getMeteringMode()
-	{
-		return thiz.currentMeteringMode;
+		MainScreen.getInstance().showHelp = show;
 	}
 
 	/*
 	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Get/Set method for private variables
 	 */
 
+	@Override
 	public void onPreferenceCreate(PreferenceFragment prefActivity)
 	{
 		setImageSizeOptions(prefActivity, MODE_GENERAL);
 		setImageSizeOptions(prefActivity, MODE_SMART_MULTISHOT_AND_NIGHT);
 		setImageSizeOptions(prefActivity, MODE_PANORAMA);
 		setImageSizeOptions(prefActivity, MODE_VIDEO);
+	}
+
+	private void setColorEffectOptions(PreferenceFragment prefActivity)
+	{
+		CharSequence[] entries = null;
+		CharSequence[] entryValues = null;
+
+		String opt1 = sRearColorEffectPref;
+		String opt2 = sFrontColorEffectPref;
+		
+		ListPreference lp = (ListPreference) prefActivity.findPreference(opt1);
+		ListPreference lp2 = (ListPreference) prefActivity.findPreference(opt2);
+
+		int[] colorEfects = CameraController.getSupportedColorEffects();
+		
+		if (colorEfects == null || CameraController.ColorEffectsNamesList == null 
+				|| !CameraController.isColorEffectSupported()) {
+			if (lp != null) {
+				prefActivity.getPreferenceScreen().removePreference(lp);
+			}
+			
+			if (lp2 != null) {
+				prefActivity.getPreferenceScreen().removePreference(lp2);
+			}
+			
+			return;
+		}
+		
+		entries = CameraController.ColorEffectsNamesList
+				.toArray(new CharSequence[CameraController.ColorEffectsNamesList.size()]);
+		entryValues = new CharSequence[colorEfects.length];
+		for (int i = 0; i < colorEfects.length; i++)
+		{
+			entryValues[i] = Integer.toString(colorEfects[i]);
+		}
+
+		if (CameraController.isFrontCamera() && lp2 != null)
+			prefActivity.getPreferenceScreen().removePreference(lp2);
+		else if (lp != null && lp2 != null)
+		{
+			prefActivity.getPreferenceScreen().removePreference(lp);
+			lp = lp2;
+		}
+		if (lp != null)
+		{
+			lp.setEntries(entries);
+			lp.setEntryValues(entryValues);
+		}
 	}
 
 	private void setImageSizeOptions(PreferenceFragment prefActivity, int mode)
@@ -828,12 +625,14 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		int currentIdx = -1;
 		String opt1 = "";
 		String opt2 = "";
+		String opt3 = "";
 
 		if (mode == MODE_GENERAL)
 		{
 			opt1 = sImageSizeRearPref;
 			opt2 = sImageSizeFrontPref;
-			currentIdx = Integer.parseInt(MainScreen.getImageSizeIndex());
+			opt3 = sImageSizeSonyRemotePref;
+			currentIdx = MainScreen.thiz.getImageSizeIndex();
 
 			if (currentIdx == -1)
 			{
@@ -848,22 +647,27 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		{
 			opt1 = sImageSizeMultishotBackPref;
 			opt2 = sImageSizeMultishotFrontPref;
-			currentIdx = Integer.parseInt(CameraController.MultishotResolutionsIdxesList.get(MainScreen
-					.selectImageDimensionMultishot()));
-			entries = CameraController.MultishotResolutionsNamesList
-					.toArray(new CharSequence[CameraController.MultishotResolutionsNamesList.size()]);
-			entryValues = CameraController.MultishotResolutionsIdxesList
-					.toArray(new CharSequence[CameraController.MultishotResolutionsIdxesList.size()]);
+			if (!CameraController.isRemoteCamera())
+			{
+				currentIdx = Integer.parseInt(CameraController.MultishotResolutionsIdxesList.get(selectImageDimensionMultishot()));
+				entries = CameraController.MultishotResolutionsNamesList
+						.toArray(new CharSequence[CameraController.MultishotResolutionsNamesList.size()]);
+				entryValues = CameraController.MultishotResolutionsIdxesList
+						.toArray(new CharSequence[CameraController.MultishotResolutionsIdxesList.size()]);
+			}
 		} else if (mode == MODE_PANORAMA)
 		{
 			opt1 = sImageSizePanoramaBackPref;
 			opt2 = sImageSizePanoramaFrontPref;
-			PanoramaAugmentedCapturePlugin.onDefaultSelectResolutons();
-			currentIdx = PanoramaAugmentedCapturePlugin.prefResolution;
-			entries = PanoramaAugmentedCapturePlugin.getResolutionspicturenameslist().toArray(
-					new CharSequence[PanoramaAugmentedCapturePlugin.getResolutionspicturenameslist().size()]);
-			entryValues = PanoramaAugmentedCapturePlugin.getResolutionspictureidxeslist().toArray(
-					new CharSequence[PanoramaAugmentedCapturePlugin.getResolutionspictureidxeslist().size()]);
+			if (!CameraController.isRemoteCamera())
+			{
+				PanoramaAugmentedCapturePlugin.onDefaultSelectResolutons();
+				currentIdx = PanoramaAugmentedCapturePlugin.prefResolution;
+				entries = PanoramaAugmentedCapturePlugin.getResolutionsPictureNamesList().toArray(
+						new CharSequence[PanoramaAugmentedCapturePlugin.getResolutionsPictureNamesList().size()]);
+				entryValues = PanoramaAugmentedCapturePlugin.getResolutionsPictureIndexesList().toArray(
+						new CharSequence[PanoramaAugmentedCapturePlugin.getResolutionsPictureIndexesList().size()]);
+			}
 		} else if (mode == MODE_VIDEO)
 		{
 			opt1 = sImageSizeVideoBackPref;
@@ -877,25 +681,31 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			if (CamcorderProfile.hasProfile(CameraController.getCameraIndex(), VideoCapturePlugin.QUALITY_4K))
 			{
 				entriesTmp[idx] = "4K";
-				entryValuesTmp[idx] = "5";
+				entryValuesTmp[idx] = "6";
+				idx++;
+			}
+			if (CamcorderProfile.hasProfile(CameraController.getCameraIndex(), CamcorderProfile.QUALITY_2160P))
+			{
+				entriesTmp[idx] = "2160p";
+				entryValuesTmp[idx] = "2";
 				idx++;
 			}
 			if (CamcorderProfile.hasProfile(CameraController.getCameraIndex(), CamcorderProfile.QUALITY_1080P))
 			{
 				entriesTmp[idx] = "1080p";
-				entryValuesTmp[idx] = "2";
+				entryValuesTmp[idx] = "3";
 				idx++;
 			}
 			if (CamcorderProfile.hasProfile(CameraController.getCameraIndex(), CamcorderProfile.QUALITY_720P))
 			{
 				entriesTmp[idx] = "720p";
-				entryValuesTmp[idx] = "3";
+				entryValuesTmp[idx] = "4";
 				idx++;
 			}
 			if (CamcorderProfile.hasProfile(CameraController.getCameraIndex(), CamcorderProfile.QUALITY_480P))
 			{
 				entriesTmp[idx] = "480p";
-				entryValuesTmp[idx] = "4";
+				entryValuesTmp[idx] = "5";
 				idx++;
 			}
 			if (CamcorderProfile.hasProfile(CameraController.getCameraIndex(), CamcorderProfile.QUALITY_CIF))
@@ -925,14 +735,29 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		{
 			ListPreference lp = (ListPreference) prefActivity.findPreference(opt1);
 			ListPreference lp2 = (ListPreference) prefActivity.findPreference(opt2);
+			ListPreference lp3 = (ListPreference) prefActivity.findPreference(opt3);
 
-			if (CameraController.getCameraIndex() == 0 && lp2 != null)
-				prefActivity.getPreferenceScreen().removePreference(lp2);
-			else if (lp != null && lp2 != null)
+			if (!CameraController.isRemoteCamera())
+			{
+				if (lp3 != null)
+				{
+					prefActivity.getPreferenceScreen().removePreference(lp3);
+				}
+
+				if (CameraController.getCameraIndex() == 0 && lp2 != null)
+					prefActivity.getPreferenceScreen().removePreference(lp2);
+				else if (lp != null && lp2 != null)
+				{
+					prefActivity.getPreferenceScreen().removePreference(lp);
+					lp = lp2;
+				}
+			} else
 			{
 				prefActivity.getPreferenceScreen().removePreference(lp);
-				lp = lp2;
+				prefActivity.getPreferenceScreen().removePreference(lp2);
+				lp = lp3;
 			}
+
 			if (lp != null)
 			{
 				lp.setEntries(entries);
@@ -960,8 +785,8 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 					{
 						public boolean onPreferenceChange(Preference preference, Object newValue)
 						{
-							thiz.imageSizeIdxPreference = newValue.toString();
-							CameraController.setCameraImageSizeIndex(Integer.parseInt(newValue.toString()), false);
+							thiz.imageSizeIdxPreference = Integer.parseInt(newValue.toString());
+							setCameraImageSizeIndex(Integer.parseInt(newValue.toString()), false);
 							return true;
 						}
 					});
@@ -971,19 +796,18 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 				{
 					lp.setOnPreferenceChangeListener(new OnPreferenceChangeListener()
 					{
-						// @Override
 						public boolean onPreferenceChange(Preference preference, Object newValue)
 						{
 							int value = Integer.parseInt(newValue.toString());
 							PanoramaAugmentedCapturePlugin.prefResolution = value;
 
-							for (int i = 0; i < PanoramaAugmentedCapturePlugin.getResolutionspictureidxeslist().size(); i++)
+							for (int i = 0; i < PanoramaAugmentedCapturePlugin.getResolutionsPictureIndexesList().size(); i++)
 							{
-								if (PanoramaAugmentedCapturePlugin.getResolutionspictureidxeslist().get(i)
+								if (PanoramaAugmentedCapturePlugin.getResolutionsPictureIndexesList().get(i)
 										.equals(newValue))
 								{
 									final int idx = i;
-									final Point point = PanoramaAugmentedCapturePlugin.getResolutionspicturesizeslist()
+									final Point point = PanoramaAugmentedCapturePlugin.getResolutionsPictureSizeslist()
 											.get(idx);
 
 									// frames_fit_count may decrease when
@@ -995,18 +819,16 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 											.getAmountOfMemoryToFitFrames() / PanoramaAugmentedCapturePlugin
 											.getFrameSizeInBytes(point.x, point.y));
 
-									{
-										Toast.makeText(
-												MainScreen.getInstance(),
-												String.format(
-														MainScreen
-																.getInstance()
-																.getString(
-																		R.string.pref_plugin_capture_panoramaaugmented_imageheight_warning),
-														frames_fit_count), Toast.LENGTH_SHORT).show();
+									Toast.makeText(
+											MainScreen.getInstance(),
+											String.format(
+													MainScreen
+															.getInstance()
+															.getString(
+																	R.string.pref_plugin_capture_panoramaaugmented_imageheight_warning),
+													frames_fit_count), Toast.LENGTH_SHORT).show();
 
-										return true;
-									}
+									return true;
 								}
 							}
 
@@ -1016,48 +838,50 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 				}
 			}
 		}
-
 	}
 
+	@Override
 	public void onAdvancePreferenceCreate(PreferenceFragment prefActivity)
 	{
 		CheckBoxPreference cp = (CheckBoxPreference) prefActivity.findPreference(getResources().getString(
-				R.string.Preference_UseHALv3Key));
+				R.string.Preference_UseCamera2Key));
 		final CheckBoxPreference fp = (CheckBoxPreference) prefActivity.findPreference(MainScreen.sCaptureRAWPref);
-		
+
 		if (cp != null)
 		{
-			if (!CameraController.isHALv3Supported())
+			if (!CameraController.isCamera2Supported())
 				cp.setEnabled(false);
 			else
 				cp.setEnabled(true);
-			
+
 			cp.setOnPreferenceChangeListener(new OnPreferenceChangeListener()
 			{
 				public boolean onPreferenceChange(Preference preference, Object useCamera2)
 				{
+					PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext()).edit()
+							.putBoolean(ApplicationScreen.sInitModeListPref, true).commit();
+
 					boolean new_value = Boolean.parseBoolean(useCamera2.toString());
 					if (new_value)
 					{
-						if(fp != null && CameraController.isRAWCaptureSupported())
+						if (fp != null && CameraController.isRAWCaptureSupported())
 							fp.setEnabled(true);
 						else
 							fp.setEnabled(false);
-					}
-					else if(fp != null)
+					} else if (fp != null)
 					{
-						PreferenceManager
-						.getDefaultSharedPreferences(MainScreen.getMainContext()).edit().putBoolean(MainScreen.sCaptureRAWPref, false).commit();
+						PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext()).edit()
+								.putBoolean(MainScreen.sCaptureRAWPref, false).commit();
 						fp.setEnabled(false);
 					}
-					
+
 					return true;
 				}
 			});
 		}
-		
+
 		final PreferenceFragment mPref = prefActivity;
-		
+
 		if (fp != null)
 		{
 			fp.setOnPreferenceChangeListener(new OnPreferenceChangeListener()
@@ -1069,90 +893,96 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 					{
 						new AlertDialog.Builder(mPref.getActivity())
 								.setIcon(R.drawable.gui_almalence_alert_dialog_icon)
-								.setTitle(R.string.Pref_NightCapture_FocusModeAlert_Title)
-								.setMessage(R.string.Pref_NightCapture_FocusModeAlert_Msg)
+								.setTitle(R.string.Pref_Common_CaptureRAW_Title)
+								.setMessage(R.string.Pref_Common_CaptureRAW_Description)
 								.setPositiveButton(android.R.string.ok, null).create().show();
 					}
 					return true;
 				}
 			});
-			
-			if(CameraController.isRAWCaptureSupported() && CameraController.isUseHALv3())
+
+			if (CameraController.isRAWCaptureSupported() && CameraController.isUseCamera2())
 				fp.setEnabled(true);
 			else
 				fp.setEnabled(false);
 		}
-	}
-
-	public void glSetRenderingMode(final int renderMode)
-	{
-		if (renderMode != GLSurfaceView.RENDERMODE_WHEN_DIRTY && renderMode != GLSurfaceView.RENDERMODE_CONTINUOUSLY)
+		
+		//Real exposure preference should be available only in Camera2 mode
+		CheckBoxPreference realExposurePf = (CheckBoxPreference) prefActivity.findPreference(MainScreen.sRealExposureTimeOnPreviewPref);
+		if(realExposurePf != null)
 		{
-			throw new IllegalArgumentException();
+			boolean isCamera2 = PreferenceManager.getDefaultSharedPreferences(
+					MainScreen.getMainContext()).getBoolean(getResources().getString(R.string.Preference_UseCamera2Key), false);
+			if (!isCamera2)
+			{
+				realExposurePf.setEnabled(false);
+			}
+			else
+				realExposurePf.setEnabled(true);
 		}
 
-		final GLSurfaceView surfaceView = glView;
-		if (surfaceView != null)
-		{
-			surfaceView.setRenderMode(renderMode);
-		}
-	}
-
-	public void glRequestRender()
-	{
-		final GLSurfaceView surfaceView = glView;
-		if (surfaceView != null)
-		{
-			surfaceView.requestRender();
-		}
-	}
-
-	public void queueGLEvent(final Runnable runnable)
-	{
-		final GLSurfaceView surfaceView = glView;
-
-		if (surfaceView != null && runnable != null)
-		{
-			surfaceView.queueEvent(runnable);
-		}
-	}
-
-	public int glGetPreviewTexture()
-	{
-		return glView.getPreviewTexture();
-	}
-
-	public SurfaceTexture glGetSurfaceTexture()
-	{
-		return glView.getSurfaceTexture();
+		setColorEffectOptions(prefActivity);
 	}
 
 	@Override
-	protected void onStart()
+	protected void onApplicationStart()
 	{
-		super.onStart();
-		MainScreen.getCameraController().onStart();
+		setContentView(R.layout.opencamera_main_layout);
+		
+		findViewById(R.id.SurfaceView02).setVisibility(View.GONE);
+		preview = (SurfaceView) this.findViewById(R.id.SurfaceView01);
+		preview.setOnClickListener(this);
+		preview.setOnTouchListener(this);
+		preview.setKeepScreenOn(true);
+
+		surfaceHolder = preview.getHolder();
+		surfaceHolder.addCallback(this);
+		
+		mWifiHandler.register();
+
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
+
+		boolean isCamera2 = prefs.getBoolean(getResources().getString(R.string.Preference_UseCamera2Key),
+				(CameraController.isNexus || CameraController.isFlex2 || CameraController.isAndroidOne || CameraController.isGalaxyS6 || CameraController.isG4) ? true : false);
+		CameraController.setUseCamera2(isCamera2);
+		prefs.edit()
+				.putBoolean(getResources().getString(R.string.Preference_UseCamera2Key), CameraController.isUseCamera2())
+				.commit();
+		int cameraSelected = prefs.getInt(MainScreen.sCameraModePref, 0);
+		if (cameraSelected == CameraController.getNumberOfCameras() - 1)
+		{
+			prefs.edit().putInt(ApplicationScreen.sCameraModePref, 0).commit();
+			MainScreen.getGUIManager().setCameraModeGUI(0);
+		}
+
+		CameraController.onStart();
 		MainScreen.getGUIManager().onStart();
 		PluginManager.getInstance().onStart();
 	}
 
 	@Override
-	protected void onStop()
+	protected void onApplicationStop()
 	{
-		super.onStop();
+		switchingMode = false;
 		mApplicationStarted = false;
 		orientationMain = 0;
 		orientationMainPrevious = 0;
-		MainScreen.getGUIManager().onStop();
-		PluginManager.getInstance().onStop();
-		MainScreen.getCameraController().onStop();
+		ApplicationScreen.getGUIManager().onStop();
+		ApplicationScreen.getPluginManager().onStop();
+		CameraController.onStop();
 
-		if (CameraController.isUseHALv3())
-			stopImageReaders();
+		if (!CameraController.isRemoteCamera())
+		{
+			if (CameraController.isUseCamera2())
+				stopImageReaders();
+		}
+
+		mWifiHandler.reconnectToLastWifi();
+		mWifiHandler.unregister();
 	}
 
 	@TargetApi(21)
-	private void stopImageReaders()
+	protected void stopImageReaders()
 	{
 		// IamgeReader should be closed
 		if (mImageReaderPreviewYUV != null)
@@ -1178,9 +1008,17 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	}
 
 	@Override
-	protected void onDestroy()
+	protected void stopRemotePreview()
 	{
-		super.onDestroy();
+		if (preview != null && SimpleStreamSurfaceView.class.isInstance(preview))
+		{
+			((SimpleStreamSurfaceView) preview).stop();
+		}
+	}
+
+	@Override
+	protected void onApplicationDestroy()
+	{
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
 		if (launchTorch && prefs.getInt(sFlashModePref, -1) == CameraParameters.FLASH_MODE_TORCH)
 		{
@@ -1190,13 +1028,13 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		{
 			prefs.edit().putBoolean("PrefBarcodescannerVF", prefBarcode).commit();
 		}
-		
+
 		prefs.edit().putBoolean(MainScreen.sPhotoTimeLapseIsRunningPref, false);
 		prefs.edit().putBoolean(MainScreen.sPhotoTimeLapseActivePref, false);
-		
+
 		MainScreen.getGUIManager().onDestroy();
 		PluginManager.getInstance().onDestroy();
-		MainScreen.getCameraController().onDestroy();
+		CameraController.onDestroy();
 
 		// <!-- -+-
 		/**** Billing *****/
@@ -1208,17 +1046,38 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	}
 
 	@Override
-	protected void onResume()
+	protected void onApplicationResume()
 	{
-		super.onResume();
+		//resets all requests for preview frames on restart.
+		CameraController.resetNeedPreviewFrame();
+		
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
+// <!-- -+-
+        //check appturbo app of the month conditions
+        if (!unlockAllPurchased)
+        {
+        	if (isAppturboUnlockable(this))
+        	{
+        		unlockAllPurchased = true;
+    			Editor prefsEditor = prefs.edit();
+    			prefsEditor.putBoolean("unlock_all_forever", true).commit();
+        		Toast.makeText(MainScreen.getMainContext(), this.getResources().getString(R.string.string_appoftheday), Toast.LENGTH_LONG).show();
+        	}
+        }
+// -+- -->
+        
+		isCameraConfiguring = false;
+
+		mWifiHandler.register();
+		if (mNfcAdapter != null) {
+			mNfcAdapter.enableForegroundDispatch(this, NFCHandler.getPendingIntent(this),
+					NFCHandler.getIntentFilterArray(), NFCHandler.getTechListArray());
+		}
 
 		if (!isCreating)
-			new CountDownTimer(50, 50)
+			onResumeTimer = new CountDownTimer(50, 50)
 			{
-				public void onTick(long millisUntilFinished)
-				{
-					// Not used
-				}
+				public void onTick(long millisUntilFinished){}
 
 				public void onFinish()
 				{
@@ -1227,48 +1086,78 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 
 					updatePreferences();
 
-					preview.setKeepScreenOn(keepScreenOn);
-
 					captureFormat = CameraController.JPEG;
-
-					saveToPath = prefs.getString(sSavePathPref, Environment.getExternalStorageDirectory()
-							.getAbsolutePath());
-					saveToPreference = prefs.getString(MainScreen.sSaveToPref, "0");
-					sortByDataPreference = prefs.getBoolean(MainScreen.sSortByDataPref, false);
 
 					maxScreenBrightnessPreference = prefs.getBoolean("maxScreenBrightnessPref", false);
 					setScreenBrightness(maxScreenBrightnessPreference);
-					
-					captureRAW = prefs.getBoolean(MainScreen.sCaptureRAWPref, false);
 
-					CameraController.useHALv3(prefs.getBoolean(getResources()
-							.getString(R.string.Preference_UseHALv3Key), false));
+					MainScreen.thiz.findViewById(R.id.mainLayout2).setVisibility(View.VISIBLE);
 
+					boolean openCamera = false;
+					String modeId = PluginManager.getInstance().getActiveModeID();
+					if (CameraController.isRemoteCamera() && !(modeId.contains("single") || modeId.contains("video")))
+					{
+						openCamera = true;
+						prefs.edit().putInt(MainScreen.sCameraModePref, 0).commit();
+						CameraController.setCameraIndex(0);
+						guiManager.setCameraModeGUI(0);
+					}
+
+					CameraController.onResume();
 					MainScreen.getGUIManager().onResume();
 					PluginManager.getInstance().onResume();
+					
 					MainScreen.thiz.mPausing = false;
 
-					if (CameraController.isUseHALv3())
+					if (!CameraController.isRemoteCamera())
 					{
-						MainScreen.thiz.findViewById(R.id.mainLayout2).setVisibility(View.VISIBLE);
-						Log.d("MainScreen", "onResume: CameraController.setupCamera(null)");
-						CameraController.setupCamera(null);
+						// set preview, on click listener and surface buffers
+						findViewById(R.id.SurfaceView02).setVisibility(View.GONE);
+						preview = (SurfaceView) findViewById(R.id.SurfaceView01);
 
-						if (glView != null)
+						surfaceHolder = preview.getHolder();
+						surfaceHolder.addCallback(MainScreen.this);
+
+						preview.setVisibility(View.VISIBLE);
+						preview.setOnClickListener(MainScreen.this);
+						preview.setOnTouchListener(MainScreen.this);
+						preview.setKeepScreenOn(true);
+
+						if (CameraController.isUseCamera2())
 						{
-							glView.onResume();
-							Log.d("GL", "glView onResume");
+							MainScreen.setSurfaceHolderSize(1, 1);
 						}
-					} else if (surfaceCreated && (!CameraController.isCameraCreated()))
+
+						if (CameraController.isUseCamera2())
+						{
+							Log.d("MainScreen", "onResume: CameraController.setupCamera(null)");
+							CameraController.setupCamera(null, !switchingMode || openCamera);
+
+							if (glView != null)
+							{
+								glView.onResume();
+								Log.d("GL", "glView onResume");
+							}
+						} else if ((surfaceCreated && (!CameraController.isCameraCreated())) ||
+						// this is for change mode without camera restart!
+								(surfaceCreated && MainScreen.getInstance().getSwitchingMode()))
+						{
+							CameraController.setupCamera(surfaceHolder, !switchingMode || openCamera);
+
+							if (glView != null)
+							{
+								glView.onResume();
+								Log.d("GL", "glView onResume");
+							}
+						}
+					} else
 					{
-						MainScreen.thiz.findViewById(R.id.mainLayout2).setVisibility(View.VISIBLE);
-						CameraController.setupCamera(surfaceHolder);
+						sonyCameraSelected();
+					}
 
-						if (glView != null)
-						{
-							glView.onResume();
-							Log.d("GL", "glView onResume");
-						}
+					if (preview != null)
+					{
+						preview.setKeepScreenOn(keepScreenOn);
 					}
 					orientListener.enable();
 				}
@@ -1285,12 +1174,12 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			isScreenTimerRunning = true;
 		}
 
+		//checking for available memory
 		long memoryFree = getAvailableInternalMemory();
 		if (memoryFree < 30)
 			Toast.makeText(MainScreen.getMainContext(), "Almost no free space left on internal storage.",
 					Toast.LENGTH_LONG).show();
 
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
 		boolean dismissKeyguard = prefs.getBoolean("dismissKeyguard", true);
 		if (dismissKeyguard)
 			getWindow()
@@ -1298,10 +1187,12 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 							WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
 									| WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
 		else
+		{
 			getWindow()
 					.clearFlags(
 							WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
 									| WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
+		}
 
 		// <!-- -+-
 		if (isABCUnlockedInstalled(this))
@@ -1312,55 +1203,48 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		// -+- -->
 	}
 
-	public void relaunchCamera()
-	{
-		if (CameraController.isUseHALv3())
-		{
-			new CountDownTimer(100, 100)
-			{
-				public void onTick(long millisUntilFinished)
-				{
-					// Not used
-				}
-
-				public void onFinish()
-				{
-					PluginManager.getInstance().switchMode(
-							ConfigParser.getInstance().getMode(PluginManager.getInstance().getActiveModeID()));
-				}
-			}.start();
-		}
-	}
-
-	private long getAvailableInternalMemory()
-	{
-		File path = Environment.getDataDirectory();
-		StatFs stat = new StatFs(path.getPath());
-		long blockSize = stat.getBlockSize();
-		long availableBlocks = stat.getAvailableBlocks();
-		return availableBlocks * blockSize / 1048576;
-	}
-
 	private void updatePreferences()
 	{
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
-		CameraController.setCameraIndex(!prefs.getBoolean(MainScreen.sUseFrontCameraPref, false) ? 0 : 1);
+		CameraController.setCameraIndex(prefs.getInt(MainScreen.sCameraModePref, 0));
 		shutterPreference = prefs.getBoolean(MainScreen.sShutterPref, false);
-		shotOnTapPreference = prefs.getBoolean(MainScreen.sShotOnTapPref, false);
-		imageSizeIdxPreference = prefs.getString(CameraController.getCameraIndex() == 0 ? MainScreen.sImageSizeRearPref
-				: MainScreen.sImageSizeFrontPref, "-1");
+		shotOnTapPreference = Integer.parseInt(prefs.getString(MainScreen.sShotOnTapPref, "0"));
 
-		multishotImageSizeIdxPreference = prefs.getString(
+		if (!CameraController.isRemoteCamera())
+		{
+			imageSizeIdxPreference = Integer.parseInt(prefs.getString(
+					CameraController.getCameraIndex() == 0 ? MainScreen.sImageSizeRearPref
+							: MainScreen.sImageSizeFrontPref, "-1"));
+
+			multishotImageSizeIdxPreference = Integer
+					.parseInt(prefs.getString(CameraController.getCameraIndex() == 0 ? sImageSizeMultishotBackPref
+							: sImageSizeMultishotFrontPref, "-1"));
+		} else
+		{
+			imageSizeIdxPreference = Integer.parseInt(prefs.getString(MainScreen.sImageSizeSonyRemotePref, "-1"));
+			multishotImageSizeIdxPreference = Integer.parseInt(prefs.getString(
+					MainScreen.sImageSizeMultishotSonyRemotePref, "-1"));
+		}
+
+		multishotImageSizeIdxPreference = Integer.parseInt(prefs.getString(
 				CameraController.getCameraIndex() == 0 ? sImageSizeMultishotBackPref : sImageSizeMultishotFrontPref,
-				"-1");
+				"-1"));
 
-		keepScreenOn = prefs.getBoolean("keepScreenOn", false);
+		keepScreenOn = prefs.getBoolean(sKeepScreenOn, false);
 	}
 
 	@Override
-	protected void onPause()
+	protected void onApplicationPause()
 	{
-		super.onPause();
+		if (mNfcAdapter != null) {
+			mNfcAdapter.disableForegroundDispatch(this);
+		}
+
+		if (onResumeTimer != null)
+		{
+			onResumeTimer.cancel();
+		}
+
 		mApplicationStarted = false;
 
 		MainScreen.getGUIManager().onPause();
@@ -1385,7 +1269,17 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			isScreenTimerRunning = false;
 		}
 
-		CameraController.onPause();
+		CameraController.onPause(switchingMode);
+		switchingMode = false;
+
+		if (!CameraController.isRemoteCamera())
+		{
+			if (CameraController.isUseCamera2())
+				stopImageReaders();
+		} else
+		{
+			stopRemotePreview();
+		}
 
 		this.findViewById(R.id.mainLayout2).setVisibility(View.INVISIBLE);
 
@@ -1419,8 +1313,14 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	@Override
 	public void surfaceChanged(final SurfaceHolder holder, final int format, final int width, final int height)
 	{
+		mCameraSurface = holder.getSurface();
 
-		if (!isCreating)
+		if (isCameraConfiguring)
+		{
+			PluginManager.getInstance().sendMessage(ApplicationInterface.MSG_SURFACE_CONFIGURED, 0);
+			isCameraConfiguring = false;
+		} else if (!isCreating)
+		{
 			new CountDownTimer(50, 50)
 			{
 				public void onTick(long millisUntilFinished)
@@ -1435,38 +1335,79 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 					if (!MainScreen.thiz.mPausing && surfaceCreated && (!CameraController.isCameraCreated()))
 					{
 						MainScreen.thiz.findViewById(R.id.mainLayout2).setVisibility(View.VISIBLE);
-						Log.d("MainScreen", "surfaceChanged: CameraController.setupCamera(null)");
-						if (!CameraController.isUseHALv3())
+						Log.d("MainScreen", "surfaceChanged: CameraController.setupCamera(null). SurfaceSize = "
+								+ width + "x" + height);
+						if (!CameraController.isRemoteCamera())
 						{
-							CameraController.setupCamera(holder);
-						} else
-						{
-							messageHandler.sendEmptyMessage(PluginManager.MSG_SURFACE_READY);
+							if (!CameraController.isUseCamera2())
+							{
+								CameraController.setupCamera(holder, !switchingMode);
+							} else
+							{
+								Log.e("MainScreen",
+										"surfaceChanged: sendEmptyMessage(ApplicationInterface.MSG_SURFACE_READY)");
+								messageHandler.sendEmptyMessage(ApplicationInterface.MSG_SURFACE_READY);
+							}
 						}
 					}
 				}
 			}.start();
-		else
+		} else
 		{
 			updatePreferences();
 		}
 	}
 
-	public static int selectImageDimensionMultishot()
+	public void setCameraImageSizeIndex(int captureIndex, boolean init)
 	{
+		CameraController.setCameraImageSizeIndex(captureIndex);
+		if (init)
+		{
+			if (!CameraController.isRemoteCamera())
+			{
+				SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mainContext);
+				prefs.edit()
+						.putString(
+								CameraController.getCameraIndex() == 0 ? MainScreen.sImageSizeRearPref
+										: MainScreen.sImageSizeFrontPref, String.valueOf(captureIndex)).commit();
+			} else
+			{
+				SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mainContext);
+				prefs.edit().putString(MainScreen.sImageSizeSonyRemotePref, String.valueOf(captureIndex)).commit();
+			}
+		}
+	}
+
+	@Override
+	public void setSpecialImageSizeIndexPref(int iIndex)
+	{
+		SharedPreferences.Editor prefEditor = PreferenceManager.getDefaultSharedPreferences(mainContext).edit();
+		prefEditor.putString(CameraController.getCameraIndex() == 0 ? MainScreen.sImageSizeMultishotBackPref
+																	: MainScreen.sImageSizeMultishotFrontPref, String.valueOf(iIndex));
+		prefEditor.commit();
+	}
+
+	@Override
+	public String getSpecialImageSizeIndexPref()
+	{
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mainContext);
+		return prefs.getString(CameraController.getCameraIndex() == 0 ? MainScreen.sImageSizeMultishotBackPref
+																	  : MainScreen.sImageSizeMultishotFrontPref, "-1");
+	}
+
+	@Override
+	public int selectImageDimensionMultishot()
+	{
+		String modeName = PluginManager.getInstance().getActiveModeID();
+		if (CameraController.isUseCamera2() && modeName.contains("night"))
+		{
+			return 0;
+		}
+
 		long maxMem = Runtime.getRuntime().maxMemory() - Debug.getNativeHeapAllocatedSize();
 		long maxMpix = (maxMem - 1000000) / 3; // 2 x Mpix - result, 1/4 x Mpix
 												// x 4 - compressed input jpegs,
 												// 1Mb - safe reserve
-
-		// if (maxMpix < MIN_MPIX_SUPPORTED)
-		// {
-		// String msg;
-		// msg = "MainScreen.selectImageDimension maxMem = " + maxMem;
-		// // Log.d("MultishotCapturePlugin",
-		// // "MainScreen.selectImageDimension maxMpix < MIN_MPIX_SUPPORTED");
-		// // Log.d("MultishotCapturePlugin", msg);
-		// }
 
 		// find index selected in preferences
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
@@ -1526,30 +1467,6 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		return captureIdx;
 	}
 
-	public void onSurfaceChangedMain(final SurfaceHolder holder, final int width, final int height)
-	{
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
-		CameraController.setCameraIndex(!prefs.getBoolean(sUseFrontCameraPref, false) ? 0 : 1);
-
-		shutterPreference = prefs.getBoolean(sShutterPref, false);
-		shotOnTapPreference = prefs.getBoolean(sShotOnTapPref, false);
-		imageSizeIdxPreference = prefs.getString(CameraController.getCameraIndex() == 0 ? sImageSizeRearPref
-				: sImageSizeFrontPref, "-1");
-
-		if (!MainScreen.thiz.mPausing && surfaceCreated && (!CameraController.isCameraCreated()))
-		{
-			MainScreen.thiz.findViewById(R.id.mainLayout2).setVisibility(View.VISIBLE);
-
-			if (CameraController.isUseHALv3())
-				messageHandler.sendEmptyMessage(PluginManager.MSG_SURFACE_READY);
-			else
-			{
-				Log.d("MainScreen", "surfaceChangedMain: CameraController.setupCamera(null)");
-				CameraController.setupCamera(holder);
-			}
-		}
-	}
-
 	@Override
 	public void addSurfaceCallback()
 	{
@@ -1557,9 +1474,10 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	}
 
 	@Override
-	public void configureCamera()
+	public void configureCamera(boolean createGUI)
 	{
-		Log.d("MainScreen", "configureCamera()");
+		Log.e("MainScreen", "configureCamera()");
+		switchingMode = false;
 
 		CameraController.updateCameraFeatures();
 
@@ -1567,210 +1485,106 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		// full-size image
 		PluginManager.getInstance().setCameraPreviewSize();
 		// prepare list of surfaces to be used in capture requests
-		if (CameraController.isUseHALv3())
-			configureHALv3Camera(captureFormat);
-		else
+		if (!CameraController.isRemoteCamera())
 		{
-			Camera.Size sz = CameraController.getCameraParameters().getPreviewSize();
+			if (CameraController.isUseCamera2())
+				configureCamera2Camera(captureFormat);
+			else
+			{
+				Camera.Size sz = CameraController.getCameraParameters().getPreviewSize();
 
-			guiManager.setupViewfinderPreviewSize(new CameraController.Size(sz.width, sz.height));
-			CameraController.allocatePreviewBuffer(
-					sz.width
-							* sz.height
-							* ImageFormat.getBitsPerPixel(CameraController.getCameraParameters()
-									.getPreviewFormat()) / 8);
+				Log.e("MainScreen", "Viewfinder preview size: " + sz.width + "x" + sz.height);
+				guiManager.setupViewfinderPreviewSize(new CameraController.Size(sz.width, sz.height));
+				double bufferSize = sz.width * sz.height
+						* ImageFormat.getBitsPerPixel(CameraController.getCameraParameters().getPreviewFormat()) / 8.0d;
+				CameraController.allocatePreviewBuffer(bufferSize);
 
-			CameraController.getCamera().setErrorCallback(CameraController.getInstance());
+				CameraController.getCamera().setErrorCallback(CameraController.getInstance());
 
-			PluginManager.getInstance().sendMessage(PluginManager.MSG_CAMERA_CONFIGURED, 0);
-		}
-	}
-
-	private void onCameraConfigured()
-	{
-		PluginManager.getInstance().setupCameraParameters();
-
-		Camera.Parameters cp = CameraController.getCameraParameters();
-
-		if (!CameraController.isUseHALv3())
+				onCameraConfigured();
+			}
+		} else
 		{
-			try
-			{
-				// Nexus 5 is giving preview which is too dark without this
-				if (Build.MODEL.contains("Nexus 5"))
-				{
-					cp.setPreviewFpsRange(7000, 30000);
-					CameraController.setCameraParameters(cp);
-					cp = CameraController.getCameraParameters();
-				}
-			} catch (RuntimeException e)
-			{
-				Log.d("CameraTest", "MainScreen.setupCamera unable setParameters " + e.getMessage());
-			}
-
-			if (cp != null)
-			{
-				previewWidth = cp.getPreviewSize().width;
-				previewHeight = cp.getPreviewSize().height;
-			}
-
+			guiManager.setupViewfinderPreviewSize(new CameraController.Size(((SimpleStreamSurfaceView) preview)
+					.getSurfaceWidth(), ((SimpleStreamSurfaceView) preview).getSurfaceHeight()));
+			onCameraConfigured();
 		}
 
-		try
+		Log.e("MainScreen", "createGUI is " + createGUI);
+		if (createGUI)
 		{
-			Util.initialize(mainContext);
-			Util.initializeMeteringMatrix();
-		} catch (Exception e)
-		{
-			Log.e("Main setup camera", "Util.initialize failed!");
+			MainScreen.getGUIManager().onGUICreate();
+			PluginManager.getInstance().onGUICreate();
+//			MainScreen.getGUIManager().onGUICreate();
 		}
-
-		prepareMeteringAreas();
-
-		if (!CameraController.isUseHALv3())
-		{
-			guiManager.onCameraCreate();
-			PluginManager.getInstance().onCameraParametersSetup();
-			guiManager.onPluginsInitialized();
-		}
-
-		// ----- Start preview and setup frame buffer if needed
-
-		// call camera release sequence from onPause somewhere ???
-		new CountDownTimer(10, 10)
-		{
-			@Override
-			public void onFinish()
-			{
-				if (!CameraController.isUseHALv3())
-				{
-					if (!CameraController.isCameraCreated())
-						return;
-					// exceptions sometimes happen here when resuming after
-					// processing
-					try
-					{
-						CameraController.startCameraPreview();
-					} catch (RuntimeException e)
-					{
-						Toast.makeText(MainScreen.thiz, "Unable to start camera", Toast.LENGTH_LONG).show();
-						return;
-					}
-
-					CameraController.getCamera().setPreviewCallbackWithBuffer(CameraController.getInstance());
-					CameraController.getCamera().addCallbackBuffer(CameraController.getPreviewBuffer());
-				} else
-				{
-					guiManager.onCameraCreate();
-					PluginManager.getInstance().onCameraParametersSetup();
-					guiManager.onPluginsInitialized();
-				}
-
-				PluginManager.getInstance().onCameraSetup();
-				guiManager.onCameraSetup();
-				MainScreen.mApplicationStarted = true;
-			}
-
-			@Override
-			public void onTick(long millisUntilFinished)
-			{
-				// Not used
-			}
-		}.start();
 	}
 
 	@TargetApi(21)
-	private void configureHALv3Camera(int captureFormat)
+	@Override
+	public void createCaptureSession()
 	{
-		DisplayMetrics metrics = new DisplayMetrics();
-		MainScreen.getInstance().getWindowManager().getDefaultDisplay().getMetrics(metrics);
-		Log.d("MainScreen", "Screen size = " + metrics.widthPixels + " x " + metrics.heightPixels);
-		List<Surface> sfl = new ArrayList<Surface>();
-
-//		Log.d("MainScreen", "configureHALv3Camera. mImageReaderPreviewYUV size = " + mImageReaderPreviewYUV.getWidth() + " x " + mImageReaderPreviewYUV.getHeight());
-		Log.d("MainScreen", "configureHALv3Camera. surfaceHolder size = " + surfaceWidth + " x " + surfaceHeight);
-		
-		surfaceHolder.setFixedSize(surfaceWidth, surfaceHeight);
-//		surfaceHolder.setFixedSize(1280, 960);
+		CameraController.setupImageReadersCamera2();
 		mCameraSurface = surfaceHolder.getSurface();
-		sfl.add(mCameraSurface); // surface for viewfinder preview
-		
-//		if(captureFormat != CameraController.RAW)			//when capture RAW preview frames is not available
-//			sfl.add(mImageReaderPreviewYUV.getSurface()); // surface for preview yuv
-//														// images
+		surfaceList.add(mCameraSurface); // surface for viewfinder preview
+
+		// if (captureFormat != CameraController.RAW) // when capture RAW
+		// preview frames is not available
+		if(mImageReaderPreviewYUV != null)
+			surfaceList.add(mImageReaderPreviewYUV.getSurface()); // surface for
+																	// preview yuv
+		// images
 		if (captureFormat == CameraController.YUV)
 		{
-			Log.d("MainScreen", "add mImageReaderYUV " + mImageReaderYUV.getWidth() + " x " + mImageReaderYUV.getHeight());
-			sfl.add(mImageReaderYUV.getSurface()); // surface for yuv image
-													// capture
-		} else if(captureFormat == CameraController.JPEG)
-		{
-			Log.d("MainScreen", "add mImageReaderJPEG " + mImageReaderJPEG.getWidth() + " x " + mImageReaderJPEG.getHeight());
-			sfl.add(mImageReaderJPEG.getSurface()); // surface for jpeg image
-													// capture
-		}
-		else if(captureFormat == CameraController.RAW)
-		{
-			Log.d("MainScreen", "add mImageReaderRAW + mImageReaderJPEG " + mImageReaderRAW.getWidth() + " x " + mImageReaderRAW.getHeight());
-//			sfl.add(mImageReaderJPEG.getSurface()); // surface for jpeg image
+			Log.d("MainScreen",
+					"add mImageReaderYUV " + mImageReaderYUV.getWidth() + " x " + mImageReaderYUV.getHeight());
+			surfaceList.add(mImageReaderYUV.getSurface());
+			
+			//Temporary disable RAW capturing on Galaxy S6 in all modes, including Super mode
+//			String modeName = PluginManager.getInstance().getActiveModeID();
+//			if (CameraController.isGalaxyS6 && modeName.contains("nightmode"))
+//				surfaceList.add(mImageReaderRAW.getSurface());
+//			else
+//			{
+//				Log.d("MainScreen",
+//						"add mImageReaderYUV " + mImageReaderYUV.getWidth() + " x " + mImageReaderYUV.getHeight());
+//				surfaceList.add(mImageReaderYUV.getSurface());
+//			}
 			// capture
-			if(CameraController.isRAWCaptureSupported())
-				sfl.add(mImageReaderRAW.getSurface());
+		} else if (captureFormat == CameraController.JPEG)
+		{
+			Log.d("MainScreen",
+					"add mImageReaderJPEG " + mImageReaderJPEG.getWidth() + " x " + mImageReaderJPEG.getHeight());
+			surfaceList.add(mImageReaderJPEG.getSurface()); // surface for jpeg
+															// image
+			// capture
+		} else if (captureFormat == CameraController.RAW)
+		{
+			Log.d("MainScreen", "add mImageReaderRAW + mImageReaderJPEG " + mImageReaderRAW.getWidth() + " x "
+					+ mImageReaderRAW.getHeight());
+			surfaceList.add(mImageReaderJPEG.getSurface()); // surface for jpeg
+															// image
+			// capture
+			if (CameraController.isRAWCaptureSupported())
+				surfaceList.add(mImageReaderRAW.getSurface());
+			else
+				captureFormat = CameraController.JPEG;
 		}
 
-		// sfl.add(mImageReaderJPEG.getSurface());
-//		CameraController.setPreviewSurface(mImageReaderPreviewYUV.getSurface());
+		CameraController.setPreviewSurface(mImageReaderPreviewYUV.getSurface());
 
-		guiManager.setupViewfinderPreviewSize(new CameraController.Size(this.previewWidth, this.previewHeight));
-//		 guiManager.setupViewfinderPreviewSize(new CameraController.Size(1280, 960));
-
+		CameraController.setCaptureFormat(captureFormat);
 		// configure camera with all the surfaces to be ever used
-		CameraController.createCaptureSession(sfl);
 
-		// ^^ HALv3 code
-		// -------------------------------------------------------------------
-	}
-
-	private void prepareMeteringAreas()
-	{
-		Rect centerRect = Util.convertToDriverCoordinates(new Rect(previewWidth / 4, previewHeight / 4, previewWidth
-				- previewWidth / 4, previewHeight - previewHeight / 4));
-		Rect topLeftRect = Util.convertToDriverCoordinates(new Rect(0, 0, previewWidth / 2, previewHeight / 2));
-		Rect topRightRect = Util.convertToDriverCoordinates(new Rect(previewWidth / 2, 0, previewWidth,
-				previewHeight / 2));
-		Rect bottomRightRect = Util.convertToDriverCoordinates(new Rect(previewWidth / 2, previewHeight / 2,
-				previewWidth, previewHeight));
-		Rect bottomLeftRect = Util.convertToDriverCoordinates(new Rect(0, previewHeight / 2, previewWidth / 2,
-				previewHeight));
-		Rect spotRect = Util.convertToDriverCoordinates(new Rect(previewWidth / 2 - 10, previewHeight / 2 - 10,
-				previewWidth / 2 + 10, previewHeight / 2 + 10));
-
-		mMeteringAreaMatrix5.clear();
-		mMeteringAreaMatrix5.add(new Area(centerRect, 600));
-		mMeteringAreaMatrix5.add(new Area(topLeftRect, 200));
-		mMeteringAreaMatrix5.add(new Area(topRightRect, 200));
-		mMeteringAreaMatrix5.add(new Area(bottomRightRect, 200));
-		mMeteringAreaMatrix5.add(new Area(bottomLeftRect, 200));
-
-		mMeteringAreaMatrix4.clear();
-		mMeteringAreaMatrix4.add(new Area(topLeftRect, 250));
-		mMeteringAreaMatrix4.add(new Area(topRightRect, 250));
-		mMeteringAreaMatrix4.add(new Area(bottomRightRect, 250));
-		mMeteringAreaMatrix4.add(new Area(bottomLeftRect, 250));
-
-		mMeteringAreaMatrix1.clear();
-		mMeteringAreaMatrix1.add(new Area(centerRect, 1000));
-
-		mMeteringAreaCenter.clear();
-		mMeteringAreaCenter.add(new Area(centerRect, 1000));
-
-		mMeteringAreaSpot.clear();
-		mMeteringAreaSpot.add(new Area(spotRect, 1000));
+		// If camera device isn't initialized (equals null) just force stop
+		// application.
+		if (!CameraController.createCaptureSession(surfaceList))
+			PluginManager.getInstance().sendMessage(ApplicationInterface.MSG_APPLICATION_STOP, 0);
 	}
 
 	@Override
 	public void surfaceCreated(SurfaceHolder holder)
 	{
+		Log.e("MainScreen", "SURFACE CREATED");
 		// ----- Find 'normal' orientation of the device
 
 		Display display = ((WindowManager) this.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay();
@@ -1788,22 +1602,18 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		Log.d("MainScreen", "SURFACE CREATED");
 	}
 
+	// Probably used only by Panorama plugin. Added to avoid non direct
+	// interface (message/handler)
+	public static void takePicture()
+	{
+		PluginManager.getInstance().takePicture();
+	}
+
 	@Override
-	public void surfaceDestroyed(SurfaceHolder holder)
+	public void captureFailed()
 	{
-		surfaceCreated = false;
-	}
-
-	// SURFACES (preview, image readers)
-	public Surface getCameraSurface()
-	{
-		return mCameraSurface;
-	}
-
-	@TargetApi(21)
-	public Surface getPreviewYUVSurface()
-	{
-		return mImageReaderPreviewYUV.getSurface();
+		MainScreen.getMessageHandler().sendEmptyMessage(ApplicationInterface.MSG_EXPORT_FINISHED_IOEXCEPTION);
+		MainScreen.getInstance().muteShutter(false);
 	}
 
 	@TargetApi(14)
@@ -1814,11 +1624,18 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 
 	public CameraController.Size getPreviewSize()
 	{
-		LayoutParams lp = preview.getLayoutParams();
-		if (lp == null)
-			return null;
+		if (SimpleStreamSurfaceView.class.isInstance(preview))
+		{
+			return new CameraController.Size(((SimpleStreamSurfaceView) preview).getSurfaceWidth(),
+					((SimpleStreamSurfaceView) preview).getSurfaceHeight());
+		} else
+		{
+			LayoutParams lp = preview.getLayoutParams();
+			if (lp == null)
+				return null;
 
-		return new CameraController.Size(lp.width, lp.height);
+			return new CameraController.Size(lp.width, lp.height);
+		}
 	}
 
 	/*
@@ -1885,18 +1702,32 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	// all events translated to PluginManager
 	// Description<<
 
-	public static void setAutoFocusLock(boolean locked)
+	@Override
+	public void setAutoFocusLock(boolean locked)
 	{
 		mAFLocked = locked;
 	}
 
-	public static boolean getAutoFocusLock()
+	@Override
+	public boolean getAutoFocusLock()
 	{
 		return mAFLocked;
 	}
 
 	@Override
-	public boolean onKeyDown(int keyCode, KeyEvent event)
+	public boolean onKeyUpEvent(int keyCode, KeyEvent event)
+	{
+		// Prevent system sounds, for volume buttons.
+		if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	@Override
+	public boolean onKeyDownEvent(int keyCode, KeyEvent event)
 	{
 		if (!mApplicationStarted)
 			return true;
@@ -1930,7 +1761,8 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			boolean headsetFunc = prefs.getBoolean("headsetPrefCommon", false);
 			if (headsetFunc)
 			{
-				MainScreen.getGUIManager().onHardwareFocusButtonPressed();
+				//removed as not needed??? SM 21.08.15 was focusing on HW button pressed when AFL was enabled
+				//MainScreen.getGUIManager().onHardwareFocusButtonPressed();
 				MainScreen.getGUIManager().onHardwareShutterButtonPressed();
 				return true;
 			}
@@ -1943,7 +1775,8 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			int buttonFunc = Integer.parseInt(prefs.getString(MainScreen.sVolumeButtonPref, "0"));
 			if (buttonFunc == VOLUME_FUNC_SHUTTER)
 			{
-				MainScreen.getGUIManager().onHardwareFocusButtonPressed();
+				//removed as not needed??? SM 21.08.15 was focusing on HW button pressed when AFL was enabled
+				//MainScreen.getGUIManager().onHardwareFocusButtonPressed();
 				MainScreen.getGUIManager().onHardwareShutterButtonPressed();
 				return true;
 			} else if (buttonFunc == VOLUME_FUNC_EXPO)
@@ -1953,6 +1786,14 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			} else if (buttonFunc == VOLUME_FUNC_NONE)
 				return true;
 		}
+
+		// <!-- -+-
+		if (((RelativeLayout) guiManager.getMainView().findViewById(R.id.viewPagerLayoutMain)).getVisibility() == View.VISIBLE)
+		{
+			guiManager.hideStore();
+			return true;
+		}
+		// -+- -->
 
 		if (PluginManager.getInstance().onKeyDown(true, keyCode, event))
 			return true;
@@ -1973,99 +1814,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		}
 		// -+- -->
 
-		if (super.onKeyDown(keyCode, event))
-			return true;
 		return false;
-	}
-
-	@Override
-	public void onClick(View v)
-	{
-		if (mApplicationStarted)
-			MainScreen.getGUIManager().onClick(v);
-	}
-
-	@Override
-	public boolean onTouch(View view, MotionEvent event)
-	{
-		if (mApplicationStarted)
-			return MainScreen.getGUIManager().onTouch(view, event);
-		return true;
-	}
-
-	public boolean onTouchSuper(View view, MotionEvent event)
-	{
-		return super.onTouchEvent(event);
-	}
-
-	public void onButtonClick(View v)
-	{
-		MainScreen.getGUIManager().onButtonClick(v);
-	}
-
-	@Override
-	public void onShutter()
-	{
-		PluginManager.getInstance().onShutter();
-	}
-
-	// >>Description
-	// message processor
-	//
-	// processing main events and calling active plugin procedures
-	//
-	// possible some additional plugin dependent events.
-	//
-	// Description<<
-	@Override
-	public boolean handleMessage(Message msg)
-	{
-
-		switch (msg.what)
-		{
-		case MSG_RETURN_CAPTURED:
-			this.setResult(RESULT_OK);
-			this.finish();
-			break;
-		case PluginManager.MSG_CAMERA_CONFIGURED:
-			onCameraConfigured();
-			break;
-		case PluginManager.MSG_CAMERA_READY:
-			{
-				if (CameraController.isCameraCreated())
-				{
-					configureCamera();
-					PluginManager.getInstance().onGUICreate();
-					MainScreen.getGUIManager().onGUICreate();
-				}
-			}
-			break;
-		case PluginManager.MSG_CAMERA_OPENED:
-			if (mCameraStarted)
-				break;
-		case PluginManager.MSG_SURFACE_READY:
-			{
-				// if both surface is created and camera device is opened
-				// - ready to set up preview and other things
-				// if (surfaceCreated && (HALv3.getCamera2() != null))
-				if (surfaceCreated)
-				{
-					configureCamera();
-					PluginManager.getInstance().onGUICreate();
-					MainScreen.getGUIManager().onGUICreate();
-					mCameraStarted = true;
-				}
-			}
-			break;
-		case PluginManager.MSG_CAMERA_STOPED:
-			mCameraStarted = false;
-			break;
-		default:
-			PluginManager.getInstance().handleMessage(msg);
-			break;
-		}
-
-		return true;
 	}
 
 	public void menuButtonPressed()
@@ -2073,9 +1822,10 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		PluginManager.getInstance().menuButtonPressed();
 	}
 
-	public void disableCameraParameter(GUI.CameraParameter iParam, boolean bDisable, boolean bInitMenu)
+	public void disableCameraParameter(GUI.CameraParameter iParam, boolean bDisable, boolean bInitMenu,
+			boolean bModeInit)
 	{
-		guiManager.disableCameraParameter(iParam, bDisable, bInitMenu);
+		guiManager.disableCameraParameter(iParam, bDisable, bInitMenu, bModeInit);
 	}
 
 	public void showOpenGLLayer(final int version)
@@ -2096,101 +1846,87 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	{
 		if (glView != null)
 		{
-			// preview.getHolder().getSurface().lockCanvas(null).drawColor(Color.BLACK);
 			glView.onPause();
+			glView.destroyDrawingCache();
 			((RelativeLayout) this.findViewById(R.id.mainLayout2)).removeView(glView);
 			glView = null;
 		}
 	}
 
+	@Override
+	public void showCaptureIndication(boolean playShutter)
+	{
+		// play tick sound
+		MainScreen.getGUIManager().showCaptureIndication();
+		if (playShutter)
+			MainScreen.playShutter();
+	}
+
 	public void playShutter(int sound)
 	{
-		if (!MainScreen.isShutterSoundEnabled())
+		if (!MainScreen.getInstance().isShutterSoundEnabled())
 		{
 			MediaPlayer mediaPlayer = MediaPlayer.create(MainScreen.thiz, sound);
 			mediaPlayer.start();
 		}
 	}
 
-	public void playShutter()
+	public static void playShutter()
 	{
-		if (!MainScreen.isShutterSoundEnabled())
+		if (!MainScreen.getInstance().isShutterSoundEnabled())
 		{
-			if (shutterPlayer != null)
-				shutterPlayer.play();
+			if (thiz.shutterPlayer != null)
+				thiz.shutterPlayer.play();
 		}
 	}
 
 	// set TRUE to mute and FALSE to unmute
 	public void muteShutter(boolean mute)
 	{
-		if (MainScreen.isShutterSoundEnabled())
+		if (MainScreen.getInstance().isShutterSoundEnabled())
 		{
 			AudioManager mgr = (AudioManager) MainScreen.thiz.getSystemService(MainScreen.AUDIO_SERVICE);
 			mgr.setStreamMute(AudioManager.STREAM_SYSTEM, mute);
 		}
 	}
-
-//	public static int getImageWidth()
-//	{
-//		return thiz.imageWidth;
-//	}
-//
-//	public static void setImageWidth(int setImageWidth)
-//	{
-//		thiz.imageWidth = setImageWidth;
-//	}
-//
-//	public static int getImageHeight()
-//	{
-//		return thiz.imageHeight;
-//	}
-//
-//	public static void setImageHeight(int setImageHeight)
-//	{
-//		thiz.imageHeight = setImageHeight;
-//	}
-
-//	public static int getSaveImageWidth()
-//	{
-//		return thiz.saveImageWidth;
-//	}
-//
-//	public static void setSaveImageWidth(int setSaveImageWidth)
-//	{
-//		thiz.saveImageWidth = setSaveImageWidth;
-//	}
-//
-//	public static int getSaveImageHeight()
-//	{
-//		return thiz.saveImageHeight;
-//	}
-//
-//	public static void setSaveImageHeight(int setSaveImageHeight)
-//	{
-//		thiz.saveImageHeight = setSaveImageHeight;
-//	}
-
-	public static int getPreviewWidth()
+	@Override
+	public void setExpoPreviewPref(boolean previewMode)
 	{
-		return thiz.previewWidth;
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mainContext);
+		Editor prefsEditor = prefs.edit();
+		prefsEditor.putBoolean(MainScreen.sExpoPreviewModePref, previewMode);
+		prefsEditor.commit();
 	}
 
-	public static void setPreviewWidth(int iWidth)
+	@Override
+	public boolean getExpoPreviewPref()
 	{
-		thiz.previewWidth = iWidth;
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mainContext);
+		if (true == prefs.contains(MainScreen.sExpoPreviewModePref))
+		{
+			return prefs.getBoolean(MainScreen.sExpoPreviewModePref, true);
+		} else
+			return true;
 	}
 
-	public static int getPreviewHeight()
+	public void setLastPhotoModePref(String mode)
 	{
-		return thiz.previewHeight;
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mainContext);
+		Editor prefsEditor = prefs.edit();
+		prefsEditor.putString(MainScreen.sLastPhotoModePref, mode);
+		prefsEditor.commit();
 	}
 
-	public static void setPreviewHeight(int iHeight)
+	public String getLastPhotoModePref()
 	{
-		thiz.previewHeight = iHeight;
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mainContext);
+		if (true == prefs.contains(MainScreen.sLastPhotoModePref))
+		{
+			return prefs.getString(MainScreen.sLastPhotoModePref, "single");
+		} else
+			return "single";
 	}
-
+	
 	public static boolean getWantLandscapePhoto()
 	{
 		return wantLandscapePhoto;
@@ -2227,55 +1963,69 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		}
 	}
 
+	
+	private static boolean			showStore					= false;
+	
 	public static Resources getAppResources()
 	{
 		return MainScreen.thiz.getResources();
 	}
 
+	public static void setShowStore(boolean show)
+	{
+		showStore = show;
+	}
+
+	public static boolean isShowStore()
+	{
+		return showStore;
+	}
+	
 	/*******************************************************/
 	/************************ Billing ************************/
-
-	private boolean		showStore					= false;
 	// <!-- -+-
-	OpenIabHelper		mHelper;
+	protected static OpenIabHelper	mHelper;
 
-	private boolean		bOnSale						= false;
-	private boolean		couponSale					= false;
+	private static boolean			bOnSale						= false;
+	private static boolean			couponSale					= false;
 
-	private boolean		unlockAllPurchased			= false;
-	private boolean		hdrPurchased				= false;
-	private boolean		panoramaPurchased			= false;
-	private boolean		objectRemovalBurstPurchased	= false;
-	private boolean		groupShotPurchased			= false;
+	private static boolean			unlockAllPurchased			= false;
+	private static boolean			superPurchased				= false;
+	private static boolean			hdrPurchased				= false;
+	private static boolean			panoramaPurchased			= false;
+	private static boolean			objectRemovalBurstPurchased	= false;
+	private static boolean			groupShotPurchased			= false;
 
-	private boolean		unlockAllSubscriptionMonth	= false;
-	private boolean		unlockAllSubscriptionYear	= false;
+	private static boolean			unlockAllSubscriptionMonth	= false;
+	private static boolean			unlockAllSubscriptionYear	= false;
 
-	static final String	SKU_HDR						= "plugin_almalence_hdr";
-	static final String	SKU_PANORAMA				= "plugin_almalence_panorama";
-	static final String	SKU_UNLOCK_ALL				= "unlock_all_forever";
+	static final String				SKU_SUPER					= "plugin_almalence_super";
+	static final String				SKU_HDR						= "plugin_almalence_hdr";
+	static final String				SKU_PANORAMA				= "plugin_almalence_panorama";
+	static final String				SKU_UNLOCK_ALL				= "unlock_all_forever";
 
 	// barcode coupon
-	static final String	SKU_UNLOCK_ALL_COUPON		= "unlock_all_forever_coupon";
+	static final String				SKU_UNLOCK_ALL_COUPON		= "unlock_all_forever_coupon";
 
 	// multishot currently
-	static final String	SKU_MOVING_SEQ				= "plugin_almalence_moving_burst";
+	static final String				SKU_MOVING_SEQ				= "plugin_almalence_moving_burst";
 
 	// unused. but if someone payed - will be unlocked multishot
-	static final String	SKU_GROUPSHOT				= "plugin_almalence_groupshot";
+	static final String				SKU_GROUPSHOT				= "plugin_almalence_groupshot";
 	// subscription
-	static final String	SKU_SUBSCRIPTION_YEAR		= "subscription_unlock_all_year";
-	static final String	SKU_SUBSCRIPTION_YEAR_NEW	= "subscription_unlock_all_year_3free";
-	static final String	SKU_SUBSCRIPTION_YEAR_CTRL	= "subscription_unlock_all_year_controller";
+	static final String				SKU_SUBSCRIPTION_YEAR		= "subscription_unlock_all_year";
+	static final String				SKU_SUBSCRIPTION_YEAR_NEW	= "subscription_unlock_all_year_3free";
+	static final String				SKU_SUBSCRIPTION_YEAR_CTRL	= "subscription_unlock_all_year_controller";
 
-	static final String	SKU_SALE1					= "abc_sale_controller1";
-	static final String	SKU_SALE2					= "abc_sale_controller2";
+	static final String				SKU_SALE1					= "abc_sale_controller1";
+	static final String				SKU_SALE2					= "abc_sale_controller2";
 
-	static final String	SKU_PROMO					= "abc_promo";
+	static final String				SKU_PROMO					= "abc_promo";
 
 	static
 	{
 		// Yandex store
+		OpenIabHelper.mapSku(SKU_SUPER, "com.yandex.store", "plugin_almalence_super");
 		OpenIabHelper.mapSku(SKU_HDR, "com.yandex.store", "plugin_almalence_hdr");
 		OpenIabHelper.mapSku(SKU_PANORAMA, "com.yandex.store", "plugin_almalence_panorama");
 		OpenIabHelper.mapSku(SKU_UNLOCK_ALL, "com.yandex.store", "unlock_all_forever");
@@ -2291,6 +2041,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		OpenIabHelper.mapSku(SKU_PROMO, "com.yandex.store", "abc_promo");
 
 		// Amazon store
+		OpenIabHelper.mapSku(SKU_SUPER, OpenIabHelper.NAME_AMAZON, "plugin_almalence_super_amazon");
 		OpenIabHelper.mapSku(SKU_HDR, OpenIabHelper.NAME_AMAZON, "plugin_almalence_hdr_amazon");
 		OpenIabHelper.mapSku(SKU_PANORAMA, OpenIabHelper.NAME_AMAZON, "plugin_almalence_panorama_amazon");
 		OpenIabHelper.mapSku(SKU_UNLOCK_ALL, OpenIabHelper.NAME_AMAZON, "unlock_all_forever_amazon");
@@ -2308,6 +2059,8 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		OpenIabHelper.mapSku(SKU_PROMO, OpenIabHelper.NAME_AMAZON, "abc_promo_amazon");
 
 		// Samsung store
+		// OpenIabHelper.mapSku(SKU_SUPER, OpenIabHelper.NAME_SAMSUNG,
+		// "100000103369/000001018387");
 		// OpenIabHelper.mapSku(SKU_HDR, OpenIabHelper.NAME_SAMSUNG,
 		// "100000103369/000001018387");
 		// OpenIabHelper.mapSku(SKU_PANORAMA, OpenIabHelper.NAME_SAMSUNG,
@@ -2327,16 +2080,6 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		// "100000103369/000001018394");
 	}
 
-	public void setShowStore(boolean show)
-	{
-		showStore = show;
-	}
-
-	public boolean isShowStore()
-	{
-		return showStore;
-	}
-
 	public void activateCouponSale()
 	{
 		couponSale = true;
@@ -2353,14 +2096,9 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	}
 
 	// controls subscription status request
-	private boolean	subscriptionStatusRequest	= false;
-	private long	timeLastSubscriptionCheck	= 0;							// should
-																				// check
-																				// each
-																				// 32
-																				// days
-																				// 32*24*60*60*1000
-	private long	days32						= 32 * 24 * 60 * 60 * 1000L;
+	private static boolean	subscriptionStatusRequest	= false;
+	private static long		timeLastSubscriptionCheck	= 0;// should check each 32 days - 32*24*60*60*1000
+	private long			days32						= 32 * 24 * 60 * 60 * 1000L;
 
 	private void createBillingHandler()
 	{
@@ -2374,7 +2112,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			else
 				subscriptionStatusRequest = false;
 
-			if ((isInstalled("com.almalence.hdr_plus")) || (isInstalled("com.almalence.hdr")) || (isInstalled("com.almalence.pixfix")))
+			if ((isInstalled("com.almalence.hdr_plus")) || (isInstalled("com.almalence.pixfix")))
 			{
 				hdrPurchased = true;
 				Editor prefsEditor = prefs.edit();
@@ -2391,15 +2129,18 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 			String base64EncodedPublicKeyYandex = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6KzaraKmv48Y+Oay2ZpWu4BHtSKYZidyCxbaYZmmOH4zlRNic/PDze7OA4a1buwdrBg3AAHwfVbHFzd9o91yinnHIWYQqyPg7L1Swh5W70xguL4jlF2N/xI9VoL4vMRv3Bf/79VfQ11utcPLHEXPR8nPEp9PT0wN2Hqp4yCWFbfvhVVmy7sQjywnfLqcWTcFCT6N/Xdxs1quq0hTE345MiCgkbh1xVULmkmZrL0rWDVCaxfK4iZWSRgQJUywJ6GMtUh+FU6/7nXDenC/vPHqnDR0R6BRi+QsES0ZnEfQLqNJoL+rqJDr/sDIlBQQDMQDxVOx0rBihy/FlHY34UF+bwIDAQAB";
 			// Create the helper, passing it our context and the public key to
 			// verify signatures with
-			// Log.v("Main billing", "Creating IAB helper.");
 			Map<String, String> storeKeys = new HashMap<String, String>();
 			storeKeys.put(OpenIabHelper.NAME_GOOGLE, base64EncodedPublicKeyGoogle);
 			storeKeys.put("com.yandex.store", base64EncodedPublicKeyYandex);
-			mHelper = new OpenIabHelper(this, storeKeys);
+
+			OpenIabHelper.Options.Builder builder = new OpenIabHelper.Options.Builder()
+					.setStoreSearchStrategy(OpenIabHelper.Options.SEARCH_STRATEGY_INSTALLER_THEN_BEST_FIT)
+					.setVerifyMode(OpenIabHelper.Options.VERIFY_EVERYTHING).addStoreKeys(storeKeys);
+
+			mHelper = new OpenIabHelper(this, builder.build());
 
 			OpenIabHelper.enableDebugLogging(true);
 
-			// Log.v("Main billing", "Starting setup.");
 			mHelper.startSetup(new IabHelper.OnIabSetupFinishedListener()
 			{
 				public void onIabSetupFinished(IabResult result)
@@ -2415,6 +2156,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 						}
 
 						List<String> additionalSkuList = new ArrayList<String>();
+						additionalSkuList.add(SKU_SUPER);
 						additionalSkuList.add(SKU_HDR);
 						additionalSkuList.add(SKU_PANORAMA);
 						additionalSkuList.add(SKU_UNLOCK_ALL);
@@ -2441,8 +2183,6 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 						additionalSkuList.add(SKU_SALE1);
 						additionalSkuList.add(SKU_SALE2);
 
-						// Log.v("Main billing",
-						// "Setup successful. Querying inventory.");
 						mHelper.queryInventoryAsync(true, additionalSkuList, mGotInventoryListener);
 					} catch (Exception e)
 					{
@@ -2472,241 +2212,253 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		}
 	}
 
-	public String								titleUnlockAll				= "$6.95";
-	public String								titleUnlockAllCoupon		= "$3.95";
-	public String								titleUnlockHDR				= "$2.99";
-	public String								titleUnlockPano				= "$2.99";
-	public String								titleUnlockMoving			= "$3.99";
-	public String								titleUnlockGroup			= "$2.99";
-	public String								titleSubscriptionYear		= "$4.99";
+	public static String						titleUnlockAll				= "$6.95";
+	public static String						titleUnlockAllCoupon		= "$3.95";
+	public static String						titleUnlockHDR				= "$2.99";
+	public static String						titleUnlockSuper			= "$2.99";
+	public static String						titleUnlockPano				= "$2.99";
+	public static String						titleUnlockMoving			= "$3.99";
+	public static String						titleUnlockGroup			= "$2.99";
+	public static String						titleSubscriptionYear		= "$4.99";
 
-	public String								summary_SKU_PROMO			= "";
-	// public String summaryUnlockAll = "";
-	// public String summaryUnlockHDR = "";
-	// public String summaryUnlockPano = "";
-	// public String summaryUnlockMoving = "";
-	// public String summaryUnlockGroup = "";
-	//
-	// public String summarySubscriptionMonth = "";
-	// public String summarySubscriptionYear = "";
+	public static String						summary_SKU_PROMO			= "alyrom0nap";
+	IabHelper.QueryInventoryFinishedListener	mGotInventoryListener		= 
+			new IabHelper.QueryInventoryFinishedListener()
+			{
+				public void onQueryInventoryFinished(
+						IabResult result,
+						Inventory inventory)
+				{
+					if (inventory == null)
+					{
+						Log.e("Main billing",
+								"mGotInventoryListener inventory null ");
+						return;
+					}
 
-	IabHelper.QueryInventoryFinishedListener	mGotInventoryListener		= new IabHelper.QueryInventoryFinishedListener()
-																			{
-																				public void onQueryInventoryFinished(
-																						IabResult result,
-																						Inventory inventory)
-																				{
-																					if (inventory == null)
-																					{
-																						Log.e("Main billing",
-																								"mGotInventoryListener inventory null ");
-																						return;
-																					}
+					SharedPreferences prefs = PreferenceManager
+							.getDefaultSharedPreferences(MainScreen
+									.getMainContext());
 
-																					SharedPreferences prefs = PreferenceManager
-																							.getDefaultSharedPreferences(MainScreen
-																									.getMainContext());
+					Editor prefsEditor = prefs.edit();
+					if (inventory
+							.hasPurchase(SKU_SUPER))
+					{
+						superPurchased = true;
+						prefsEditor
+								.putBoolean(
+										"plugin_almalence_super",
+										true).commit();
+					}
+					if (inventory.hasPurchase(SKU_HDR))
+					{
+						hdrPurchased = true;
+						prefsEditor.putBoolean(
+								"plugin_almalence_hdr",
+								true).commit();
+					}
+					if (inventory
+							.hasPurchase(SKU_PANORAMA))
+					{
+						panoramaPurchased = true;
+						prefsEditor
+								.putBoolean(
+										"plugin_almalence_panorama",
+										true).commit();
+					}
+					if (inventory
+							.hasPurchase(SKU_UNLOCK_ALL))
+					{
+						unlockAllPurchased = true;
+						prefsEditor.putBoolean(
+								"unlock_all_forever",
+								true).commit();
+					}
+					if (inventory
+							.hasPurchase(SKU_UNLOCK_ALL_COUPON))
+					{
+						unlockAllPurchased = true;
+						prefsEditor.putBoolean(
+								"unlock_all_forever",
+								true).commit();
+					}
+					if (inventory
+							.hasPurchase(SKU_MOVING_SEQ))
+					{
+						objectRemovalBurstPurchased = true;
+						prefsEditor
+								.putBoolean(
+										"plugin_almalence_moving_burst",
+										true).commit();
+					}
+					if (inventory
+							.hasPurchase(SKU_GROUPSHOT))
+					{
+						groupShotPurchased = true;
+						prefsEditor
+								.putBoolean(
+										"plugin_almalence_moving_burst",
+										true).commit();
+					}
+					if (inventory
+							.hasPurchase(SKU_SUBSCRIPTION_YEAR))
+					{
+						unlockAllSubscriptionYear = true;
+						prefsEditor
+								.putBoolean(
+										"subscription_unlock_all_year",
+										true).commit();
+						unlockAllPurchased = true;
+						prefsEditor.putBoolean(
+								"unlock_all_forever",
+								true).commit();
+					}
+					if (inventory
+							.hasPurchase(SKU_SUBSCRIPTION_YEAR_NEW))
+					{
+						unlockAllSubscriptionYear = true;
+						prefsEditor
+								.putBoolean(
+										"subscription_unlock_all_year",
+										true).commit();
+						unlockAllPurchased = true;
+						prefsEditor.putBoolean(
+								"unlock_all_forever",
+								true).commit();
+					}
 
-																					Editor prefsEditor = prefs.edit();
-																					if (inventory.hasPurchase(SKU_HDR))
-																					{
-																						hdrPurchased = true;
-																						prefsEditor.putBoolean(
-																								"plugin_almalence_hdr",
-																								true).commit();
-																					}
-																					if (inventory
-																							.hasPurchase(SKU_PANORAMA))
-																					{
-																						panoramaPurchased = true;
-																						prefsEditor
-																								.putBoolean(
-																										"plugin_almalence_panorama",
-																										true).commit();
-																					}
-																					if (inventory
-																							.hasPurchase(SKU_UNLOCK_ALL))
-																					{
-																						unlockAllPurchased = true;
-																						prefsEditor.putBoolean(
-																								"unlock_all_forever",
-																								true).commit();
-																					}
-																					if (inventory
-																							.hasPurchase(SKU_UNLOCK_ALL_COUPON))
-																					{
-																						unlockAllPurchased = true;
-																						prefsEditor.putBoolean(
-																								"unlock_all_forever",
-																								true).commit();
-																					}
-																					if (inventory
-																							.hasPurchase(SKU_MOVING_SEQ))
-																					{
-																						objectRemovalBurstPurchased = true;
-																						prefsEditor
-																								.putBoolean(
-																										"plugin_almalence_moving_burst",
-																										true).commit();
-																					}
-																					if (inventory
-																							.hasPurchase(SKU_GROUPSHOT))
-																					{
-																						groupShotPurchased = true;
-																						prefsEditor
-																								.putBoolean(
-																										"plugin_almalence_moving_burst",
-																										true).commit();
-																					}
-																					if (inventory
-																							.hasPurchase(SKU_SUBSCRIPTION_YEAR))
-																					{
-																						unlockAllSubscriptionYear = true;
-																						prefsEditor
-																								.putBoolean(
-																										"subscription_unlock_all_year",
-																										true).commit();
-																						unlockAllPurchased = true;
-																						prefsEditor.putBoolean(
-																								"unlock_all_forever",
-																								true).commit();
-																					}
-																					if (inventory
-																							.hasPurchase(SKU_SUBSCRIPTION_YEAR_NEW))
-																					{
-																						unlockAllSubscriptionYear = true;
-																						prefsEditor
-																								.putBoolean(
-																										"subscription_unlock_all_year",
-																										true).commit();
-																						unlockAllPurchased = true;
-																						prefsEditor.putBoolean(
-																								"unlock_all_forever",
-																								true).commit();
-																					}
+					try
+					{
+						String[] separated = inventory
+								.getSkuDetails(
+										SKU_SALE1)
+								.getPrice().split(",");
+						int price1 = Integer
+								.valueOf(separated[0]);
+						String[] separated2 = inventory
+								.getSkuDetails(
+										SKU_SALE2)
+								.getPrice().split(",");
+						int price2 = Integer
+								.valueOf(separated2[0]);
 
-																					try
-																					{
-																						String[] separated = inventory
-																								.getSkuDetails(
-																										SKU_SALE1)
-																								.getPrice().split(",");
-																						int price1 = Integer
-																								.valueOf(separated[0]);
-																						String[] separated2 = inventory
-																								.getSkuDetails(
-																										SKU_SALE2)
-																								.getPrice().split(",");
-																						int price2 = Integer
-																								.valueOf(separated2[0]);
+						if (price1 < price2)
+							bOnSale = true;
+						else
+							bOnSale = false;
 
-																						if (price1 < price2)
-																							bOnSale = true;
-																						else
-																							bOnSale = false;
+						prefsEditor.putBoolean(
+								"bOnSale", bOnSale)
+								.commit();
+					} catch (Exception e)
+					{
+						Log.e("Main billing SALE",
+								"No sale data available");
+						bOnSale = false;
+					}
 
-																						prefsEditor.putBoolean(
-																								"bOnSale", bOnSale)
-																								.commit();
-																					} catch (Exception e)
-																					{
-																						Log.e("Main billing SALE",
-																								"No sale data available");
-																						bOnSale = false;
-																					}
+					try
+					{
+						titleUnlockAll = inventory
+								.getSkuDetails(
+										SKU_UNLOCK_ALL)
+								.getPrice();
+						titleUnlockAllCoupon = inventory
+								.getSkuDetails(
+										SKU_UNLOCK_ALL_COUPON)
+								.getPrice();
+						titleUnlockSuper = inventory
+								.getSkuDetails(
+										SKU_SUPER)
+								.getPrice();
+						titleUnlockHDR = inventory
+								.getSkuDetails(SKU_HDR)
+								.getPrice();
+						titleUnlockPano = inventory
+								.getSkuDetails(
+										SKU_PANORAMA)
+								.getPrice();
+						titleUnlockMoving = inventory
+								.getSkuDetails(
+										SKU_MOVING_SEQ)
+								.getPrice();
+						titleUnlockGroup = inventory
+								.getSkuDetails(
+										SKU_GROUPSHOT)
+								.getPrice();
 
-																					try
-																					{
-																						titleUnlockAll = inventory
-																								.getSkuDetails(
-																										SKU_UNLOCK_ALL)
-																								.getPrice();
-																						titleUnlockAllCoupon = inventory
-																								.getSkuDetails(
-																										SKU_UNLOCK_ALL_COUPON)
-																								.getPrice();
-																						titleUnlockHDR = inventory
-																								.getSkuDetails(SKU_HDR)
-																								.getPrice();
-																						titleUnlockPano = inventory
-																								.getSkuDetails(
-																										SKU_PANORAMA)
-																								.getPrice();
-																						titleUnlockMoving = inventory
-																								.getSkuDetails(
-																										SKU_MOVING_SEQ)
-																								.getPrice();
-																						titleUnlockGroup = inventory
-																								.getSkuDetails(
-																										SKU_GROUPSHOT)
-																								.getPrice();
+						titleSubscriptionYear = inventory
+								.getSkuDetails(
+										SKU_SUBSCRIPTION_YEAR_CTRL)
+								.getPrice();
 
-																						titleSubscriptionYear = inventory
-																								.getSkuDetails(
-																										SKU_SUBSCRIPTION_YEAR_CTRL)
-																								.getPrice();
+						summary_SKU_PROMO = inventory
+								.getSkuDetails(
+										SKU_PROMO)
+								.getDescription();
+					} catch (Exception e)
+					{
+						Log.e("Market",
+								"Error Getting data for store!!!!!!!!");
+					}
+				}
+			};
 
-																						summary_SKU_PROMO = inventory
-																								.getSkuDetails(
-																										SKU_PROMO)
-																								.getDescription();
-																					} catch (Exception e)
-																					{
-																						Log.e("Market",
-																								"Error Getting data for store!!!!!!!!");
-																					}
-																				}
-																			};
+	private static int							HDR_REQUEST					= 100;
+	private static int							SUPER_REQUEST				= 107;
+	private static int							PANORAMA_REQUEST			= 101;
+	private static int							ALL_REQUEST					= 102;
+	private static int							OBJECTREM_BURST_REQUEST		= 103;
+	private static int							GROUPSHOT_REQUEST			= 104;
+	private static int							SUBSCRIPTION_YEAR_REQUEST	= 106;
 
-	private int									HDR_REQUEST					= 100;
-	private int									PANORAMA_REQUEST			= 101;
-	private int									ALL_REQUEST					= 102;
-	private int									OBJECTREM_BURST_REQUEST		= 103;
-	private int									GROUPSHOT_REQUEST			= 104;
-	private int									SUBSCRIPTION_YEAR_REQUEST	= 106;
-
-	public boolean isPurchasedAll()
+	public static boolean isPurchasedAll()
 	{
 		return unlockAllPurchased;
 	}
 
-	public boolean isPurchasedHDR()
+	public static boolean isPurchasedSuper()
+	{
+		return superPurchased;
+	}
+
+	public static boolean isPurchasedHDR()
 	{
 		return hdrPurchased;
 	}
 
-	public boolean isPurchasedPanorama()
+	public static boolean isPurchasedPanorama()
 	{
 		return panoramaPurchased;
 	}
 
-	public boolean isPurchasedMoving()
+	public static boolean isPurchasedMoving()
 	{
 		return objectRemovalBurstPurchased;
 	}
 
-	public boolean isPurchasedGroupshot()
+	public static boolean isPurchasedGroupshot()
 	{
 		return groupShotPurchased;
 	}
 
-	public boolean isPurchasedUnlockAllSubscriptionMonth()
+	public static boolean isPurchasedUnlockAllSubscriptionMonth()
 	{
 		return unlockAllSubscriptionMonth;
 	}
 
-	public boolean isPurchasedUnlockAllSubscriptionYear()
+	public static boolean isPurchasedUnlockAllSubscriptionYear()
 	{
 		return unlockAllSubscriptionYear;
 	}
 
-	public void purchaseAll()
+	public static void purchaseAll()
 	{
 		if (isPurchasedAll())
 			return;
 
 		// now will call store with abc unlocked
-		callStoreForUnlocked(this);
+		callStoreForUnlocked(thiz);
 
 		// TODO: this is for all other markets!!!!! Do not call store!!!
 		// String payload = "";
@@ -2723,6 +2475,23 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		// "Error during purchase " + e.getMessage(),
 		// Toast.LENGTH_LONG).show();
 		// }
+	}
+
+	public void purchaseSuper()
+	{
+		if (isPurchasedSuper() || isPurchasedAll())
+			return;
+		String payload = "";
+		try
+		{
+			mHelper.launchPurchaseFlow(MainScreen.thiz, SKU_SUPER, SUPER_REQUEST, mPreferencePurchaseFinishedListener,
+					payload);
+		} catch (Exception e)
+		{
+			e.printStackTrace();
+			Log.e("Main billing", "Purchase result " + e.getMessage());
+			Toast.makeText(MainScreen.thiz, "Error during purchase " + e.getMessage(), Toast.LENGTH_LONG).show();
+		}
 	}
 
 	public void purchaseHDR()
@@ -2776,7 +2545,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		}
 	}
 
-	public void purchasedUnlockAllSubscriptionYear()
+	public static void purchasedUnlockAllSubscriptionYear()
 	{
 		if (isPurchasedUnlockAllSubscriptionYear() || isPurchasedAll())
 			return;
@@ -2794,19 +2563,20 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	}
 
 	// Callback for when purchase from preferences is finished
-	IabHelper.OnIabPurchaseFinishedListener	mPreferencePurchaseFinishedListener	= new IabHelper.OnIabPurchaseFinishedListener()
-																				{
-																					public void onIabPurchaseFinished(
-																							IabResult result,
-																							Purchase purchase)
-																					{
-																						showStore = true;
-																						purchaseFinished(result,
-																								purchase);
-																					}
-																				};
+	protected static IabHelper.OnIabPurchaseFinishedListener	mPreferencePurchaseFinishedListener	= new IabHelper.OnIabPurchaseFinishedListener()
+																									{
+																										public void onIabPurchaseFinished(
+																												IabResult result,
+																												Purchase purchase)
+																										{
+																											showStore = true;
+																											purchaseFinished(
+																													result,
+																													purchase);
+																										}
+																									};
 
-	private void purchaseFinished(IabResult result, Purchase purchase)
+	private static void purchaseFinished(IabResult result, Purchase purchase)
 	{
 		Log.v("Main billing", "Purchase finished: " + result + ", purchase: " + purchase);
 		if (result.isFailure())
@@ -2826,6 +2596,14 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 
 			Editor prefsEditor = prefs.edit();
 			prefsEditor.putBoolean("plugin_almalence_hdr", true).commit();
+		}
+		if (purchase.getSku().equals(SKU_SUPER))
+		{
+			Log.v("Main billing", "Purchase SUPER.");
+			superPurchased = true;
+
+			Editor prefsEditor = prefs.edit();
+			prefsEditor.putBoolean("plugin_almalence_super", true).commit();
 		}
 		if (purchase.getSku().equals(SKU_PANORAMA))
 		{
@@ -2877,7 +2655,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 
 			timeLastSubscriptionCheck = System.currentTimeMillis();
 			prefs.edit().putLong("timeLastSubscriptionCheck", timeLastSubscriptionCheck).commit();
-			
+
 			unlockAllPurchased = true;
 			prefsEditor.putBoolean("unlock_all_forever", true).commit();
 		}
@@ -2891,21 +2669,21 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 
 			timeLastSubscriptionCheck = System.currentTimeMillis();
 			prefs.edit().putLong("timeLastSubscriptionCheck", timeLastSubscriptionCheck).commit();
-			
+
 			unlockAllPurchased = true;
 			prefsEditor.putBoolean("unlock_all_forever", true).commit();
 		}
 	}
 
-	public void launchPurchase(int requestID)
+	public static void launchPurchase(int requestID)
 	{
 		try
 		{
-			guiManager.showStore();
+			thiz.guiManager.showStore();
 		} catch (Exception e)
 		{
 			e.printStackTrace();
-			Toast.makeText(this, "Error during purchase " + e.getMessage(), Toast.LENGTH_LONG).show();
+			Toast.makeText(thiz, "Error during purchase " + e.getMessage(), Toast.LENGTH_LONG).show();
 		}
 	}
 
@@ -2938,7 +2716,8 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		}
 	}
 
-	public boolean	showPromoRedeemed	= false;
+	public boolean	showPromoRedeemed		= false;
+	public boolean	showPromoRedeemedJulius	= false;
 
 	// enter promo code to get smth
 	public void enterPromo()
@@ -2973,9 +2752,29 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		{
 			public void onClick(View v)
 			{
-				String[] sep = MainScreen.getInstance().summary_SKU_PROMO.split(";");
+				String[] sep = MainScreen.summary_SKU_PROMO.split(";");
 				String promo = editText.getText().toString();
 				boolean matchPromo = false;
+
+				// /////////////////////////////////////////////////////
+				// juliusapp promotion
+				if (promo.equalsIgnoreCase("promo2015"))
+				{
+					SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
+					panoramaPurchased = true;
+					objectRemovalBurstPurchased = true;
+
+					Editor prefsEditor = prefs.edit();
+					prefsEditor.putBoolean("plugin_almalence_panorama", true);
+					prefsEditor.putBoolean("plugin_almalence_moving_burst", true);
+					prefsEditor.commit();
+					dialog.dismiss();
+					guiManager.hideStore();
+					showPromoRedeemedJulius = true;
+					guiManager.showStore();
+					return;
+				}
+				// /////////////////////////////////////////////////////
 
 				for (int i = 0; i < sep.length; i++)
 				{
@@ -2983,16 +2782,13 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 						matchPromo = true;
 				}
 
-				// if (promo.equalsIgnoreCase("appoftheday") ||
-				// promo.equalsIgnoreCase("stelapps"))
 				if (matchPromo)
 				{
 					SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
 					unlockAllPurchased = true;
 
 					Editor prefsEditor = prefs.edit();
-					prefsEditor.putBoolean("unlock_all_forever", true);
-					prefsEditor.commit();
+					prefsEditor.putBoolean("unlock_all_forever", true).commit();
 					dialog.dismiss();
 					guiManager.hideStore();
 					showPromoRedeemed = true;
@@ -3012,44 +2808,37 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	// using files to store this info
 
 	// returns number of launches left
-	public int getLeftLaunches(String modeID)
+	public static int getLeftLaunches(String modeID)
 	{
-		String dirPath = getFilesDir().getAbsolutePath() + File.separator + modeID;
+		String dirPath = thiz.getFilesDir().getAbsolutePath() + File.separator + modeID;
 		File projDir = new File(dirPath);
 		if (!projDir.exists())
 		{
 			projDir.mkdirs();
-			WriteLaunches(projDir, 30);
+			WriteLaunches(projDir, 10);
 		}
 		int left = ReadLaunches(projDir);
 		return left;
 	}
 
 	// decrements number of launches left
-	public void decrementLeftLaunches(String modeID)
+	public static void decrementLeftLaunches(String modeID)
 	{
-		String dirPath = getFilesDir().getAbsolutePath() + File.separator + modeID;
+		String dirPath = thiz.getFilesDir().getAbsolutePath() + File.separator + modeID;
 		File projDir = new File(dirPath);
 		if (!projDir.exists())
 		{
 			projDir.mkdirs();
-			WriteLaunches(projDir, 30);
+			WriteLaunches(projDir, 10);
 		}
 
 		int left = ReadLaunches(projDir);
 		if (left > 0)
 			WriteLaunches(projDir, left - 1);
-
-		if (left == 5 || left == 3)
-		{
-			// show subscription dialog
-			showSubscriptionDialog();
-			return;
-		}
 	}
 
 	// writes number of launches left into memory
-	private void WriteLaunches(File projDir, int left)
+	private static void WriteLaunches(File projDir, int left)
 	{
 		FileOutputStream fos = null;
 		try
@@ -3067,7 +2856,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 	}
 
 	// reads number of launches left from memory
-	private int ReadLaunches(File projDir)
+	private static int ReadLaunches(File projDir)
 	{
 		int left = 0;
 		FileInputStream fis = null;
@@ -3086,19 +2875,33 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		return left;
 	}
 
-	public boolean checkLaunches(Mode mode)
+	public static boolean checkLaunches(Mode mode)
 	{
-		// if mode free
-		if (mode.SKU == null)
-			return true;
-		if (mode.SKU.isEmpty())
-			return true;
-
 		// if all unlocked
 		if (unlockAllPurchased)
 			return true;
 
+		// if mode free
+		if (mode.SKU == null)
+			return true;
+		if (mode.SKU.isEmpty())
+		{
+			int launchesLeft = MainScreen.thiz.getLeftLaunches(mode.modeID);
+
+			if ((1 == launchesLeft) || (3 == launchesLeft))
+			{
+				// show internal store
+				launchPurchase(100);
+			}
+			return true;
+		}
+
 		// if current mode unlocked
+		if (mode.SKU.equals("plugin_almalence_super"))
+		{
+			if (superPurchased || !CameraController.isUseSuperMode())
+				return true;
+		}
 		if (mode.SKU.equals("plugin_almalence_hdr"))
 		{
 			if (hdrPurchased)
@@ -3122,27 +2925,34 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 				return true;
 		}
 
-		int launchesLeft = MainScreen.thiz.getLeftLaunches(mode.modeID);
-		int id = MainScreen.getAppResources().getIdentifier(mode.modeName, "string", MainScreen.thiz.getPackageName());
+		int launchesLeft = MainScreen.getLeftLaunches(mode.modeID);
+		int id = MainScreen.getAppResources().getIdentifier(
+				(CameraController.isUseCamera2() ? mode.modeNameHAL : mode.modeName), "string",
+				MainScreen.thiz.getPackageName());
 		String modename = MainScreen.getAppResources().getString(id);
 
 		if (0 == launchesLeft)// no more launches left
 		{
-			String left = String.format(getResources().getString(R.string.trial_finished), modename);
-			Toast toast = Toast.makeText(this, left, Toast.LENGTH_LONG);
+			String left = String.format(thiz.getResources().getString(R.string.trial_finished), modename);
+			Toast toast = Toast.makeText(thiz, left, Toast.LENGTH_LONG);
 			toast.setGravity(Gravity.CENTER, 0, 0);
 			toast.show();
 
-			// show appstore for this mode
-			launchPurchase(100);
+			// show google store with paid version
+			callStoreForUnlocked(MainScreen.thiz);
+
 			return false;
-		} else if ((10 == launchesLeft) || (20 == launchesLeft) || (5 >= launchesLeft))
+		} else if (5 >= launchesLeft)
 		{
 			// show appstore button and say that it cost money
-			String left = String.format(getResources().getString(R.string.trial_left), modename, launchesLeft);
-			Toast toast = Toast.makeText(this, left, Toast.LENGTH_LONG);
+			String left = String.format(thiz.getResources().getString(R.string.trial_left), modename, launchesLeft);
+			Toast toast = Toast.makeText(thiz, left, Toast.LENGTH_LONG);
 			toast.setGravity(Gravity.CENTER, 0, 0);
 			toast.show();
+
+			if ((1 == launchesLeft) || (2 == launchesLeft) || (3 == launchesLeft))
+				// show internal store
+				launchPurchase(100);
 		}
 		return true;
 	}
@@ -3162,34 +2972,34 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		return installed;
 	}
 
-	private void showSubscriptionDialog()
+	private static void showSubscriptionDialog()
 	{
-		final float density = getResources().getDisplayMetrics().density;
+		final float density = thiz.getResources().getDisplayMetrics().density;
 
-		LinearLayout ll = new LinearLayout(this);
+		LinearLayout ll = new LinearLayout(thiz);
 		ll.setOrientation(LinearLayout.VERTICAL);
 		ll.setPadding((int) (10 * density), (int) (10 * density), (int) (10 * density), (int) (10 * density));
 
-		ImageView img = new ImageView(this);
+		ImageView img = new ImageView(thiz);
 		img.setImageResource(R.drawable.store_subscription);
 		img.setAdjustViewBounds(true);
 		ll.addView(img);
 
-		TextView tv = new TextView(this);
+		TextView tv = new TextView(thiz);
 		tv.setText(MainScreen.getAppResources().getString(R.string.subscriptionText));
 		tv.setWidth((int) (250 * density));
 		tv.setPadding((int) (4 * density), 0, (int) (4 * density), (int) (24 * density));
 		ll.addView(tv);
 
-		Button bNo = new Button(this);
+		Button bNo = new Button(thiz);
 		bNo.setText(MainScreen.getAppResources().getString(R.string.subscriptionNoText));
 		ll.addView(bNo);
 
-		Button bSubscribe = new Button(this);
+		Button bSubscribe = new Button(thiz);
 		bSubscribe.setText(MainScreen.getAppResources().getString(R.string.subscriptionYesText));
 		ll.addView(bSubscribe);
 
-		final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		final AlertDialog.Builder builder = new AlertDialog.Builder(thiz);
 		builder.setView(ll);
 		final AlertDialog dialog = builder.create();
 
@@ -3226,7 +3036,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		return true;
 	}
 
-	private void callStoreForUnlocked(Activity activity)
+	private static void callStoreForUnlocked(Activity activity)
 	{
 		try
 		{
@@ -3239,6 +3049,23 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		}
 	}
 
+	public static boolean isAppturboUnlockable(Context context) {
+    	try
+    	{
+	        List<PackageInfo> packages = context.getPackageManager().getInstalledPackages(0); 
+	        for(PackageInfo pi : packages){ 
+	            if (pi.packageName.equalsIgnoreCase("com.appturbo.appturboCA2015") 
+	                    || pi.packageName.equalsIgnoreCase("com.appturbo.appoftheday2015") ){ 
+	                return true; 
+	            } 
+	        } 
+    	}
+    	catch (Exception e)
+    	{
+    		e.printStackTrace();
+    	}
+    	return false;
+    }
 	// -+- -->
 
 	/************************ Billing ************************/
@@ -3276,7 +3103,7 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		}
 	}
 
-	private void resetOrSaveSettings()
+	protected void resetOrSaveSettings()
 	{
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
 		Editor prefsEditor = prefs.edit();
@@ -3334,21 +3161,21 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 		isSaving = prefs.getBoolean("SaveConfiguration_ISOMode", false);
 		if (!isSaving)
 		{
-			prefsEditor.putInt(sISOPref, sDefaultValue);
+			prefsEditor.putInt(sISOPref, sDefaultISOValue);
 			prefsEditor.commit();
 		}
 
 		isSaving = prefs.getBoolean("SaveConfiguration_FlashMode", true);
 		if (!isSaving)
 		{
-			prefsEditor.putInt(sFlashModePref, sDefaultValue);
+			prefsEditor.putInt(sFlashModePref, sDefaultFlashValue);
 			prefsEditor.commit();
 		}
 
 		isSaving = prefs.getBoolean("SaveConfiguration_FrontRearCamera", true);
 		if (!isSaving)
 		{
-			prefsEditor.putBoolean(sUseFrontCameraPref, false);
+			prefsEditor.putInt(sCameraModePref, 0);
 			prefsEditor.commit();
 		}
 
@@ -3370,16 +3197,26 @@ public class MainScreen extends Activity implements ApplicationInterface, View.O
 
 			prefsEditor.commit();
 		}
-		
+
 		isSaving = prefs.getBoolean("SaveConfiguration_TimelapseCapture", false);
 		if (!isSaving && !prefs.getBoolean(sPhotoTimeLapseIsRunningPref, false))
 		{
-			prefsEditor.putInt(MainScreen.sPhotoTimeLapseCaptureIntervalPref, 0);
+			prefsEditor.putInt(MainScreen.sPhotoTimeLapseCaptureIntervalPref, 5);
 			prefsEditor.putInt(MainScreen.sPhotoTimeLapseCaptureIntervalMeasurmentPref, 0);
 			prefsEditor.putBoolean(MainScreen.sPhotoTimeLapseIsRunningPref, false);
 			prefsEditor.putBoolean(MainScreen.sPhotoTimeLapseActivePref, false);
 
 			prefsEditor.commit();
 		}
+	}
+
+	@Override
+	public Activity getMainActivity()
+	{
+		return thiz;
+	}
+
+	public WifiHandler getWifiHandler() {
+		return mWifiHandler;
 	}
 }

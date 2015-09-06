@@ -26,6 +26,8 @@
    <dimen name="mainButtonHeight">65dp</dimen>
    <dimen name="mainButtonHeightSelect">65dp</dimen>
    <dimen name="shutterHeight">115dp</dimen>
+   <dimen name="shutterSwitchWidth">168dp</dimen>
+   <dimen name="shutterSwitchHeight">112dp</dimen>
    <dimen name="scanerWidth">10dp</dimen>
    <dimen name="scanerHeight">70dp</dimen>
    
@@ -36,6 +38,7 @@
    <dimen name="viewfinderViewsMarginTop">30dp</dimen>
    
    <dimen name="paramsLayoutHeight">75dp</dimen>
+   <dimen name="paramsLayoutHeightInnerMode">42dp</dimen>
    <dimen name="paramsLayoutHeightScanner">80dp</dimen>
    
    <dimen name="buttonsLayoutMarginTop">0dp</dimen>
@@ -45,6 +48,7 @@
    <dimen name="exposureTitleWidth">110dp</dimen>
    <dimen name="exposureCenterTitleWidth">110dp</dimen>
    <dimen name="exposureTitleSize">24sp</dimen>
+   <dimen name="exposureTimeTitleSize">20sp</dimen>
    
    <dimen name="blockingTitleSize">32sp</dimen>
    

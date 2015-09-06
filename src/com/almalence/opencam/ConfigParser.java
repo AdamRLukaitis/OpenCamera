@@ -29,12 +29,14 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import android.content.Context;
 import android.content.res.AssetManager;
+import android.os.Build;
 import android.util.Xml;
 
 /***
@@ -165,6 +167,28 @@ public class ConfigParser
 	{
 		parser.require(XmlPullParser.START_TAG, ns, "defaultmode");
 		String modeID = parser.getAttributeValue(null, "id");
+		
+		//set super mode by default on these devices
+		if (Build.MODEL.contains("Nexus 5") || 
+		    Build.MODEL.contains("Nexus 6") ||
+		    Build.MODEL.toLowerCase(Locale.US).replace(" ", "").contains("lg-h959") ||
+		    Build.MODEL.toLowerCase(Locale.US).replace(" ", "").contains("lg-h510") ||
+		    Build.MODEL.toLowerCase(Locale.US).replace(" ", "").contains("lg-h955") ||
+  		    Build.MODEL.toLowerCase(Locale.US).replace(" ", "").contains("lg-as995")||
+		    Build.MODEL.toLowerCase(Locale.US).replace(" ", "").contains("lg-h950") ||
+		    Build.MODEL.toLowerCase(Locale.US).replace(" ", "").contains("lg-us995")||
+		    Build.MODEL.toLowerCase(Locale.US).replace(" ", "").contains("lg-ls996")
+		    )
+		{
+			Iterator<Mode> it = modes.iterator();
+			while(it.hasNext())
+			{
+				Mode mode = it.next();
+				if(mode.modeID.contains("nightmode"))
+					modeID = "nightmode";
+			}
+		}
+		
 		parser.nextTag();
 		return modeID;
 	}

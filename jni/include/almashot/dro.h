@@ -74,6 +74,15 @@ void Dro_GetHistogramNV21
 );
 
 
+// MixLocalTables - mix local tables (either lookup or histograms) proportionally to mix_factor
+void MixLocalTables
+(
+	Uint32 in[3][3][256],
+	Uint32 out[3][3][256],
+	float mix_factor,
+	int normalize
+);
+
 // ComputeToneTable - compute tone modification table lookup_table[256].
 // Input:
 //         hist - pointer to histogram with 256 elements
@@ -239,7 +248,6 @@ void Dro_StreamingRender
 	float *mtx,
 	int sx,
 	int sy,
-	int filter,
 	float max_amplify,
 	int local_mapping,
 	int force_update,

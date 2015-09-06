@@ -24,6 +24,7 @@ by Almalence Inc. All Rights Reserved.
 
 #include "almashot.h"
 #include "blurless.h"
+#include "supersensor.h"
 #include "superzoom.h"
 
 #include "ImageConversionUtils.h"
@@ -32,7 +33,6 @@ by Almalence Inc. All Rights Reserved.
 static unsigned char *yuv[MAX_FRAMES] = {NULL};
 static void *instance = NULL;
 static int almashot_inited = 0;
-static Uint8 *OutPic = NULL;
 
 
 
@@ -111,6 +111,25 @@ extern "C" JNIEXPORT void JNICALL Java_com_almalence_plugins_processing_night_Al
 }
 
 
+extern "C" JNIEXPORT jboolean JNICALL Java_com_almalence_plugins_processing_night_AlmaShotNight_CheckClipping
+(
+	JNIEnv* env,
+	jobject thiz,
+	jint in,
+	jint sx,
+	jint sy,
+	jint x0,
+	jint y0,
+	jint w,
+	jint h
+)
+{
+	Uint8 *yuv = (Uint8 *)in;
+
+	return Super_ExposureVerification(yuv, sx, sy, x0, y0, w, h);
+}
+
+
 extern "C" JNIEXPORT jint JNICALL Java_com_almalence_plugins_processing_night_AlmaShotNight_Process
 (
 	JNIEnv* env,
@@ -124,12 +143,14 @@ extern "C" JNIEXPORT jint JNICALL Java_com_almalence_plugins_processing_night_Al
 	jint DeGhostPref,
 	jint lumaEnh,
 	jint chromaEnh,
+	jfloat fgamma,
 	jint nImages,
 	jintArray jcrop,
 	jint orientation,
 	jboolean mirror,
 	jfloat zoom,
-	jboolean isHALv3
+	jint cameraIndex,
+	jboolean isCamera2
 )
 {
 	Uint8 *OutPic, *OutNV21;
@@ -139,7 +160,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_almalence_plugins_processing_night_Al
 
 	crop = (int*)env->GetIntArrayElements(jcrop, NULL);
 
-	if (isHALv3)
+	if (isCamera2)
 	{
 		//__android_log_print(ANDROID_LOG_ERROR, "Almalence", "sx:%d sy:%d sxo:%d syo:%d", sx, sy, sxo, syo);
 
@@ -171,25 +192,73 @@ extern "C" JNIEXPORT jint JNICALL Java_com_almalence_plugins_processing_night_Al
 			}
 		}
 
-		// Note: sensor-dependent formula
-		//int sensorGain = (int)( 256*powf((float)iso/100, 0.7f) );
-		int sensorGain = (int)( 256*powf((float)iso/100, 0.5f) );
+		if (fgamma && (iso>0))
+		{
+			// iso 100 = +0.1
+			// iso 800 = -0.05
+			fgamma += 0.1f - ( logf(iso) * 3.321928095f-6.644f)*0.15f/3.f;
+			if (fgamma < 0.45f) fgamma = 0.45f;
+			if (fgamma > 0.6f) fgamma = 0.6f;
+		}
 
-		// slightly more sharpening at low zooms
-		int sharpen = 2;
-		if (sxo >= 3*sx_zoom) sharpen = 0x80;	// fine edge enhancement instead of primitive sharpen
-		else if (sxo >= 3*(sx_zoom-2*SIZE_GUARANTEE_BORDER)/2) sharpen = 1;
+		// for SR-only fgamma = 0, gamma will evaluate to 0 also
+		int gamma = (int)(fgamma * 256 + 0.5f);
+
+		// threshold at which profiles are switched (about 1.5x zoom)
+		int zoomAbove15x = sxo >= 3*(sx_zoom-2*SIZE_GUARANTEE_BORDER)/2;
+		int zoomAbove30x = sxo >= 3*sx_zoom;
+
+
+		int sensorGain, deGhostGain, filter, sharpen;
+
+		switch (cameraIndex)
+		{
+		case 100:		// Nexus 5
+			deGhostGain = 256;
+			sensorGain = (int)( 256*powf((float)iso/100, 0.5f) );
+
+			// slightly more sharpening and less filtering at low zooms
+			sharpen = 2;
+			filter = 384; // 320; // 256;
+			if (zoomAbove30x) sharpen = 0x80;	// fine edge enhancement instead of primitive sharpen at high zoom levels
+			else if (zoomAbove15x) sharpen = 1;
+			else filter = 192;
+			break;
+		case 103:		// Nexus 6
+			deGhostGain = 256;
+			sensorGain = (int)( 170*256/100*powf((float)iso/100, 0.5f) );
+
+			sharpen = 1;
+			filter = 256;
+			if (!zoomAbove15x) filter = 320;	// slightly more filtering at low zooms (noise interpolation artefacts are evident otherwise)
+			break;
+		case 507:		// LG G Flex2
+			deGhostGain = 256*60/100;
+			sensorGain = (int)( 2*256*powf((float)iso/100, 0.45f) );
+
+			sharpen = 1;
+			filter = 300;
+			if (!zoomAbove15x) filter = 192;	// slightly less filtering at low zooms (somehow sr processing is creating less sharp images here)
+			break;
+		default:
+			__android_log_print(ANDROID_LOG_INFO, "CameraTest", "Error: Unknown camera");
+			break;
+		}
+		if (zoomAbove30x) sharpen = 0x80;	// fine edge enhancement instead of primitive sharpen at high zoom levels
+
+		//__android_log_print(ANDROID_LOG_ERROR, "Almalence", "Before Super_Process, sensorGain: %d, deghostGain: %d, filter: %d, sharpen: %d, nImages: %d cameraIndex: %d",
+		//		sensorGain, deGhostGain, filter, sharpen, nImages, cameraIndex);
 
 		Super_Process(
 				yuv, &OutPic,
 				sx_zoom, sy_zoom, sxo, syo, nImages,
 				sensorGain,
-				deghostTable[DeGhostPref],
+				deGhostGain*deghostTable[DeGhostPref]/256,
 				1,							// deghostFrames
-				nTable[noisePref],
+				filter,
 				sharpen,
-				0.5f,						// gamma
-				0,							// cameraIndex
+				gamma,
+				cameraIndex,
 				0);							// externalBuffers
 
 		//__android_log_print(ANDROID_LOG_ERROR, "Almalence", "Super_Process finished, iso: %d, noise: %d %d", iso, noisePref, nTable[noisePref]);
@@ -221,9 +290,9 @@ extern "C" JNIEXPORT jint JNICALL Java_com_almalence_plugins_processing_night_Al
 	// 90/270-degree rotations are out-ot-place
 	OutNV21 = OutPic;
 	if (rotate90)
-		OutNV21 = (Uint8 *)malloc(sx*sy+2*((sx+1)/2)*((sy+1)/2));
+		OutNV21 = (Uint8 *)malloc(sxo*syo+2*((sxo+1)/2)*((syo+1)/2));
 
-	TransformNV21(OutPic, OutNV21, sx, sy, crop, flipLeftRight, flipUpDown, rotate90);
+	TransformNV21(OutPic, OutNV21, sxo, syo, crop, flipLeftRight, flipUpDown, rotate90);
 
 	//__android_log_print(ANDROID_LOG_ERROR, "Almalence", "After rotation");
 

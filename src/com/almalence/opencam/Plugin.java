@@ -37,11 +37,10 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.hardware.camera2.CaptureResult;
-import android.os.Build;
+import android.os.Environment;
 import android.preference.EditTextPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
-import android.preference.PreferenceActivity;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
@@ -55,11 +54,15 @@ import com.almalence.asynctaskmanager.Task;
 
 /* <!-- +++
 import com.almalence.opencam_plus.cameracontroller.CameraController;
+import com.almalence.opencam_plus.cameracontroller.CameraController.Size;
+import com.almalence.opencam_plus.R;
 +++ --> */
 //<!-- -+-
 import com.almalence.opencam.cameracontroller.CameraController;
-//-+- -->
 import com.almalence.opencam.cameracontroller.CameraController.Size;
+import com.almalence.opencam.R;
+//-+- -->
+
 
 /***
  * Abstract class for plugins
@@ -90,10 +93,11 @@ public abstract class Plugin
 	private View					quickControlView	= null;
 
 	protected static final String	TIME_STAMP_NAME		= "'IMG'_yyyyMMdd_HHmmss";
-
+	
 	protected long					SessionID			= 0;
 
-	protected int					requestID			= -1;
+	protected int[]					requestIDArray;
+	protected int					requestIDArrayLenght = 0;;
 	
 	protected boolean				captureRAW 			= false;
 
@@ -234,6 +238,11 @@ public abstract class Plugin
 	public void onAutoFocus(boolean paramBoolean)
 	{
 	}
+	
+	public void onAutoFocusMoving(boolean paramBoolean)
+	{
+	}
+
 
 	public void takePicture()
 	{
@@ -279,7 +288,7 @@ public abstract class Plugin
 		int prefIdx = -1;
 		try
 		{
-			prefIdx = Integer.parseInt(MainScreen.getImageSizeIndex());
+			prefIdx = ApplicationScreen.instance.getImageSizeIndex();
 		} catch (IndexOutOfBoundsException e)
 		{
 			prefIdx = -1;
@@ -304,7 +313,7 @@ public abstract class Plugin
 
 			if ((mpix >= CameraController.MIN_MPIX_SUPPORTED) && (mpix < maxMpix))
 			{
-				if (mpix > defaultCaptureMpix && mpix <= MPIX_8)
+				if (mpix > defaultCaptureMpix && (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT || mpix <= MPIX_8))
 				{
 					defaultCaptureIdx = Integer.parseInt(CameraController.getResolutionsIdxesList().get(ii));
 					defaultCaptureMpix = mpix;
@@ -356,8 +365,8 @@ public abstract class Plugin
 			}
 		}
 
-		CameraController.setCameraImageSizeIndex(CaptureIdx, true);
-		CameraController.setCameraImageSize(new CameraController.Size(CaptureWidth, CaptureHeight));		
+		ApplicationScreen.instance.setCameraImageSizeIndex(CaptureIdx, true);
+		CameraController.setCameraImageSize(new CameraController.Size(CaptureWidth, CaptureHeight));
 	}
 
 	public void setCameraPreviewSize()
@@ -366,12 +375,12 @@ public abstract class Plugin
 
 		CameraController.Size imageSize = CameraController.getCameraImageSize();
 		CameraController.Size os = getOptimalPreviewSize(cs, imageSize.getWidth(), imageSize.getHeight());
-		CameraController.setCameraPreviewSize(os);
-		MainScreen.setPreviewWidth(os.getWidth());
-		MainScreen.setPreviewHeight(os.getHeight());
+		ApplicationScreen.instance.setCameraPreviewSize(os.getWidth(), os.getHeight());
+//		ApplicationScreen.setPreviewWidth(os.getWidth());
+//		ApplicationScreen.setPreviewHeight(os.getHeight());
 	}
 
-	// Used only in old camera interface (HALv3 don't use it)
+	// Used only in old camera interface (Camera2 don't use it)
 	// called to set specific plugin's camera parameters
 	public void setupCameraParameters()
 	{
@@ -379,8 +388,8 @@ public abstract class Plugin
 		if (null == camera)
 			return;
 
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
-		int jpegQuality = Integer.parseInt(prefs.getString(MainScreen.sJPEGQualityPref, "95"));
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationScreen.getMainContext());
+		int jpegQuality = Integer.parseInt(prefs.getString(ApplicationScreen.sJPEGQualityPref, "95"));
 
 		Size imageSize = CameraController.getCameraImageSize();
 		Camera.Parameters cp = CameraController.getCameraParameters();
@@ -391,7 +400,7 @@ public abstract class Plugin
 			CameraController.setCameraParameters(cp);
 		} catch (RuntimeException e)
 		{
-			Log.e("CameraTest", "MainScreen.setupCamera unable setParameters " + e.getMessage());
+			Log.e("CameraTest", "ApplicationScreen.setupCamera unable setParameters " + e.getMessage());
 		}
 	}
 
@@ -472,6 +481,26 @@ public abstract class Plugin
 	public boolean photoTimeLapseCaptureSupported()
 	{
 		return false;
+	}
+	
+	//Capture plugin may call that method if it want to know RequestID of each captured frames
+	//It used in camera2 mode
+	public void createRequestIDList(int nFrames)
+	{
+		requestIDArray = new int[nFrames];
+		requestIDArrayLenght = nFrames;
+		
+		Log.e("Plugin", "CREATE REQUEST ID LIST. SIZE = " + nFrames);
+		
+	}
+	
+	public void addRequestID(int nFrame, int requestID)
+	{
+		if(nFrame < requestIDArrayLenght)
+		{
+			Log.e("Plugin", "ADD REQUEST ID LIST. Frame " + nFrame);
+			requestIDArray[nFrame] = requestID;
+		}
 	}
 
 	/******************************************************************************************************
@@ -710,7 +739,7 @@ public abstract class Plugin
 		if (this.quickControlView != null)
 		{
 			int icon_id = this.getQuickControlIconID();
-			Drawable icon = MainScreen.getMainContext().getResources().getDrawable(icon_id);
+			Drawable icon = ApplicationScreen.getMainContext().getResources().getDrawable(icon_id);
 			((ImageView) this.quickControlView.findViewById(R.id.imageView)).setImageDrawable(icon);
 		}
 	}

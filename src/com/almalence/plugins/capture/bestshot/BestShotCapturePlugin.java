@@ -21,22 +21,31 @@ package com.almalence.plugins.capture.bestshot;
 import java.util.Arrays;
 
 import android.annotation.TargetApi;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import android.hardware.camera2.CaptureResult;
 
 /* <!-- +++
-import com.almalence.opencam_plus.cameracontroller.CameraController;
-import com.almalence.opencam_plus.MainScreen;
-import com.almalence.opencam_plus.PluginCapture;
-import com.almalence.opencam_plus.PluginManager;
-import com.almalence.opencam_plus.R;
-+++ --> */
+ import com.almalence.opencam_plus.cameracontroller.CameraController;
+ import com.almalence.opencam_plus.ui.GUI.CameraParameter;
+ import com.almalence.opencam_plus.CameraParameters;
+ import com.almalence.opencam_plus.ApplicationScreen;
+ import com.almalence.opencam_plus.ApplicationInterface;
+ import com.almalence.opencam_plus.PluginCapture;
+ import com.almalence.opencam_plus.PluginManager;
+ import com.almalence.opencam_plus.R;
+ +++ --> */
 //<!-- -+-
 import com.almalence.opencam.cameracontroller.CameraController;
-import com.almalence.opencam.MainScreen;
+import com.almalence.opencam.ui.GUI.CameraParameter;
+import com.almalence.opencam.ApplicationInterface;
+import com.almalence.opencam.CameraParameters;
+import com.almalence.opencam.ApplicationScreen;
 import com.almalence.opencam.PluginCapture;
 import com.almalence.opencam.PluginManager;
 import com.almalence.opencam.R;
+
 //-+- -->
 
 /***
@@ -46,9 +55,8 @@ import com.almalence.opencam.R;
 public class BestShotCapturePlugin extends PluginCapture
 {
 	// defaul val. value should come from config
-	private int				imageAmount	= 5;
-
-	//private static String	sImagesAmountPref;
+	private int	imageAmount	= 5;
+	private int	preferenceFlashMode;
 
 	public BestShotCapturePlugin()
 	{
@@ -56,97 +64,64 @@ public class BestShotCapturePlugin extends PluginCapture
 	}
 
 	@Override
-	public void onCreate()
-	{
-		//sImagesAmountPref = MainScreen.getAppResources().getString(R.string.Preference_BestShotImagesAmount);
-	}
+	public void onCreate() {}
 
 	@Override
 	public void onResume()
 	{
 		imagesTaken = 0;
 		inCapture = false;
-//		refreshPreferences();
+		aboutToTakePicture = false;
+		
+		isAllImagesTaken = false;
+		isAllCaptureResultsCompleted = true;
 
-		MainScreen.setCaptureFormat(CameraController.YUV);
+		if (CameraController.isUseCamera2() && CameraController.isNexus)
+		{
+			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationScreen.getMainContext());
+			preferenceFlashMode = prefs.getInt(ApplicationScreen.sFlashModePref, ApplicationScreen.sDefaultFlashValue);
+			
+			SharedPreferences.Editor editor = prefs.edit();
+			editor.putInt(ApplicationScreen.sFlashModePref, CameraParameters.FLASH_MODE_OFF);
+			editor.commit();
+		}
+
+		ApplicationScreen.setCaptureFormat(CameraController.YUV);
 	}
 
-//	private void refreshPreferences()
-//	{
-//		try
-//		{
-//			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
-//			imageAmount = Integer.parseInt(prefs.getString(sImagesAmountPref, "5"));
-//		} catch (Exception e)
-//		{
-//			Log.v("Bestshot capture", "Cought exception " + e.getMessage());
-//		}
-//
-//		switch (imageAmount)
-//		{
-//		case 3:
-//			quickControlIconID = R.drawable.gui_almalence_mode_burst3;
-//			break;
-//		case 5:
-//			quickControlIconID = R.drawable.gui_almalence_mode_burst5;
-//			break;
-//		case 10:
-//			quickControlIconID = R.drawable.gui_almalence_mode_burst10;
-//			break;
-//		default:
-//			break;
-//		}
-//	}
+	@Override
+	public void setupCameraParameters()
+	{
+		try
+		{
+			int[] flashModes = CameraController.getSupportedFlashModes();
+			if (flashModes != null && flashModes.length > 0 && CameraController.isUseCamera2()
+					&& CameraController.isNexus)
+			{
+				CameraController.setCameraFlashMode(CameraParameters.FLASH_MODE_OFF);
 
-//	@Override
-//	public void onQuickControlClick()
-//	{
-//		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
-//		int val = Integer.parseInt(prefs.getString(sImagesAmountPref, "5"));
-//		int selected = 0;
-//		switch (val)
-//		{
-//		case 3:
-//			selected = 0;
-//			break;
-//		case 5:
-//			selected = 1;
-//			break;
-//		case 10:
-//			selected = 2;
-//			break;
-//		default:
-//			break;
-//		}
-//		selected = (selected + 1) % 3;
-//
-//		Editor editor = prefs.edit();
-//		switch (selected)
-//		{
-//		case 0:
-//			quickControlIconID = R.drawable.gui_almalence_mode_burst3;
-//			editor.putString("BestshotImagesAmount", "3");
-//			break;
-//		case 1:
-//			quickControlIconID = R.drawable.gui_almalence_mode_burst5;
-//			editor.putString("BestshotImagesAmount", "5");
-//			break;
-//		case 2:
-//			quickControlIconID = R.drawable.gui_almalence_mode_burst10;
-//			editor.putString("BestshotImagesAmount", "10");
-//			break;
-//		default:
-//			break;
-//		}
-//		editor.commit();
-//	}
+				SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationScreen.getMainContext());
+				SharedPreferences.Editor editor = prefs.edit();
+				editor.putInt(ApplicationScreen.sFlashModePref, CameraParameters.FLASH_MODE_OFF);
+				editor.commit();
+			}
+		} catch (RuntimeException e)
+		{
+			Log.e("CameraTest", "ApplicationScreen.setupCamera unable to setFlashMode");
+		}
+	}
 
 	@Override
 	public void onGUICreate()
 	{
-		MainScreen.getGUIManager().showHelp(MainScreen.getInstance().getString(R.string.Bestshot_Help_Header),
-				MainScreen.getAppResources().getString(R.string.Bestshot_Help),
-				R.drawable.plugin_help_bestshot, "bestShotShowHelp");
+		ApplicationScreen.getGUIManager().showHelp(ApplicationScreen.instance.getString(R.string.Bestshot_Help_Header),
+				ApplicationScreen.getAppResources().getString(R.string.Bestshot_Help), R.drawable.plugin_help_bestshot,
+				"bestShotShowHelp");
+
+		if (CameraController.isUseCamera2() && CameraController.isNexus)
+		{
+			ApplicationScreen.instance.disableCameraParameter(CameraParameter.CAMERA_PARAMETER_FLASH, true, false, true);
+		}
 	}
 
 	public boolean delayedCaptureSupported()
@@ -154,14 +129,24 @@ public class BestShotCapturePlugin extends PluginCapture
 		return true;
 	}
 
-	public void takePicture()
+	@Override
+	public void onPause()
 	{
-		int[] pause = new int[imageAmount];
-		Arrays.fill(pause, 50);
-		requestID = CameraController.captureImagesWithParams(imageAmount, CameraController.YUV, pause, null, true);
+		if (CameraController.isUseCamera2() && CameraController.isNexus) {
+			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationScreen.getMainContext());
+			prefs.edit().putInt(ApplicationScreen.sFlashModePref, preferenceFlashMode).commit();
+			CameraController.setCameraFlashMode(preferenceFlashMode);
+		}
 	}
 
-	
+	public void takePicture()
+	{
+		imagesTaken = 0;
+		resultCompleted = 0;
+		createRequestIDList(imageAmount);
+		CameraController.captureImagesWithParams(imageAmount, CameraController.YUV, null, null, null, null, true, true);
+	}
+
 	@Override
 	public void onImageTaken(int frame, byte[] frameData, int frame_len, int format)
 	{
@@ -170,11 +155,10 @@ public class BestShotCapturePlugin extends PluginCapture
 		if (frame == 0)
 		{
 			Log.d("Bestshot", "Load to heap failed");
-			PluginManager.getInstance().sendMessage(PluginManager.MSG_CAPTURE_FINISHED, 
-					String.valueOf(SessionID));
+			PluginManager.getInstance().sendMessage(ApplicationInterface.MSG_CAPTURE_FINISHED, String.valueOf(SessionID));
 
 			imagesTaken = 0;
-			MainScreen.getInstance().muteShutter(false);
+			ApplicationScreen.instance.muteShutter(false);
 			return;
 		}
 		String frameName = "frame" + imagesTaken;
@@ -183,20 +167,27 @@ public class BestShotCapturePlugin extends PluginCapture
 		PluginManager.getInstance().addToSharedMem(frameName + SessionID, String.valueOf(frame));
 		PluginManager.getInstance().addToSharedMem(frameLengthName + SessionID, String.valueOf(frame_len));
 		PluginManager.getInstance().addToSharedMem("frameorientation" + imagesTaken + SessionID,
-				String.valueOf(MainScreen.getGUIManager().getDisplayOrientation()));
+				String.valueOf(ApplicationScreen.getGUIManager().getDisplayOrientation()));
 		PluginManager.getInstance().addToSharedMem("framemirrored" + imagesTaken + SessionID,
 				String.valueOf(CameraController.isFrontCamera()));
 
 		if (imagesTaken >= imageAmount)
 		{
-			PluginManager.getInstance().addToSharedMem("amountofcapturedframes" + SessionID,
-					String.valueOf(imagesTaken));
-
-			PluginManager.getInstance().sendMessage(PluginManager.MSG_CAPTURE_FINISHED, 
-					String.valueOf(SessionID));
-			
-			imagesTaken = 0;
-			inCapture = false;
+			if(isAllCaptureResultsCompleted)
+			{
+				PluginManager.getInstance().addToSharedMem("amountofcapturedframes" + SessionID,
+						String.valueOf(imagesTaken));
+	
+				PluginManager.getInstance().sendMessage(ApplicationInterface.MSG_CAPTURE_FINISHED, String.valueOf(SessionID));
+	
+				imagesTaken = 0;
+				resultCompleted = 0;
+				inCapture = false;
+				
+				isAllImagesTaken = false;
+			}
+			else
+				isAllImagesTaken = true;
 		}
 	}
 
@@ -204,10 +195,28 @@ public class BestShotCapturePlugin extends PluginCapture
 	@Override
 	public void onCaptureCompleted(CaptureResult result)
 	{
-		if (result.getSequenceId() == requestID)
+		isAllCaptureResultsCompleted = false;
+		
+		resultCompleted++;
+		
+		if (resultCompleted == 1)
+			PluginManager.getInstance().addToSharedMemExifTagsFromCaptureResult(result, SessionID, -1);
+		
+		if (resultCompleted == imageAmount)
 		{
-			if (imagesTaken == 1)
-				PluginManager.getInstance().addToSharedMemExifTagsFromCaptureResult(result, SessionID);
+			isAllCaptureResultsCompleted = true;
+			
+			if(isAllImagesTaken)
+			{
+				PluginManager.getInstance().addToSharedMem("amountofcapturedframes" + SessionID,
+						String.valueOf(imagesTaken));
+				PluginManager.getInstance().sendMessage(ApplicationInterface.MSG_CAPTURE_FINISHED, String.valueOf(SessionID));
+				
+				inCapture = false;
+				resultCompleted = 0;
+				imagesTaken = 0;
+				isAllImagesTaken = false;
+			}
 		}
 	}
 

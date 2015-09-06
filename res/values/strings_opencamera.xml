@@ -4,11 +4,11 @@
     <string name="trial_finished">Free %1$s shots exhausted, please unlock</string>
     <!-- -+-  -->
     <string name="app_name">A Better Camera</string>
-    <string name="Pref_About">A Better Camera  v3.27\n(©) by Almalence Inc\n</string>
+    <string name="Pref_About">A Better Camera  v3.35\n(©) by Almalence Inc</string>
     <!--  -+- -->
     <!-- +++
     <string name="app_name">A Better Camera Unlocked</string>
-    <string name="Pref_About">A Better Camera Unlocked v3.27\n(©) by Almalence Inc\n</string>
+    <string name="Pref_About">A Better Camera Unlocked v3.35\n(©) by Almalence Inc\n</string>
     +++ -->
     <string name="cannot_create_jpeg">Error: Unable to save image!</string>
     <string name="choose_folder_pick">Use this folder</string>
@@ -23,7 +23,9 @@
     <string name="pref_advanced_saving_saveToPref_title">Save to...</string>
     <string name="pref_advanced_saving_saveToPref_summary">Select location to store images</string>
     <string name="choose_folder">Choose folder</string>
-    <string name="pref_advanced_saving_saveToPref_CantSaveToSD">Android KitKat does not allow saving to sdcard.</string>
+    <string name="pref_advanced_saving_saveToPref_CantSaveToSD">Android KitKat does not allow saving to sdcard. Android limitations.</string>
+    
+    <string name="pref_general_more_sonyCamera_available">Sony cameras available only in Single and Video modes.</string>
     
     <string name="pref_timestamp_saving_date_title">Date</string>
     <string name="pref_timestamp_saving_abbreviation_title">Month name</string>
@@ -46,6 +48,13 @@
     <string name="pref_timestamp_fontsize_normal">Medium</string>
     <string name="pref_timestamp_fontsize_big">Big</string>
     
+    <string name="pref_shot_on_tap_none">None</string>
+    <string name="pref_shot_on_tap_one_click">One click</string>
+    <string name="pref_shot_on_tap_double_click">Double click</string>
+    
+    <string name="pref_antibanding_auto">Auto</string>
+    <string name="pref_antibanding_off">Off</string>
+    
     <string name="save_to_phone">Phone</string>
     <string name="save_to_memorycard">Memory Card</string>
     <string name="save_to_custom">Custom folder</string>
@@ -65,5 +74,13 @@
     
     <string name="raterSendReview"> We care about your opinion and want to make ABC better. Send your review directly to support.</string>
     <string name="raterSend">Send</string>
+    
+    <string name="aboutFbLink">https://www.facebook.com/abettercam</string>
+    <string name="aboutGplusLink">Follow us on: </string>
+    <string name="aboutSupportLink">support@abc.almalence.com</string>
+    
+    <string name="string_appoftheday">You have now the Pro version, thanks to App of the Day</string>
+    
+    <string name="string_processing_and_saving_image">Image processing and saving...</string>
     
 </resources>

@@ -28,6 +28,7 @@ import android.graphics.DashPathEffect;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Point;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
 import android.view.Display;
@@ -42,17 +43,20 @@ import android.widget.RelativeLayout;
 import android.widget.RelativeLayout.LayoutParams;
 
 import com.almalence.SwapHeap;
+
 /* <!-- +++
- import com.almalence.opencam_plus.MainScreen;
+ import com.almalence.opencam_plus.ApplicationScreen;
  import com.almalence.opencam_plus.PluginManager;
  import com.almalence.opencam_plus.R;
  import com.almalence.opencam_plus.cameracontroller.CameraController;
+ import com.almalence.opencam_plus.ApplicationInterface;
  +++ --> */
 // <!-- -+-
-import com.almalence.opencam.MainScreen;
+import com.almalence.opencam.ApplicationScreen;
 import com.almalence.opencam.PluginManager;
 import com.almalence.opencam.R;
 import com.almalence.opencam.cameracontroller.CameraController;
+import com.almalence.opencam.ApplicationInterface;
 //-+- -->
 
 import com.almalence.util.ImageConversion;
@@ -104,13 +108,13 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 	{
 		finishing = false;
 		Message msg = new Message();
-		msg.what = PluginManager.MSG_PROCESSING_BLOCK_UI;
-		MainScreen.getMessageHandler().sendMessage(msg);
+		msg.what = ApplicationInterface.MSG_PROCESSING_BLOCK_UI;
+		ApplicationScreen.getMessageHandler().sendMessage(msg);
 
-		PluginManager.getInstance().sendMessage(PluginManager.MSG_BROADCAST, 
-				PluginManager.MSG_CONTROL_LOCKED);
+		PluginManager.getInstance().sendMessage(ApplicationInterface.MSG_BROADCAST, 
+				ApplicationInterface.MSG_CONTROL_LOCKED);
 
-		MainScreen.getGUIManager().lockControls = true;
+		ApplicationScreen.getGUIManager().lockControls = true;
 
 		sessionID = SessionID;
 
@@ -118,10 +122,11 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 				PluginManager.getInstance().getActiveMode().modeSaveName);
 
 		mDisplayOrientation = Integer.valueOf(PluginManager.getInstance().getFromSharedMem("frameorientation1" + sessionID));
-		int orientation = MainScreen.getGUIManager().getLayoutOrientation();
+		int orientation = ApplicationScreen.getGUIManager().getLayoutOrientation();
 		mLayoutOrientationCurrent = (orientation == 0 || orientation == 180) ? orientation : (orientation + 180) % 360;
-		mCameraMirrored = CameraController.isFrontCamera();
-
+		
+		mCameraMirrored = Boolean.valueOf(PluginManager.getInstance().getFromSharedMem("framemirrored1" + sessionID));
+		
 		CameraController.Size imageSize = CameraController.getCameraImageSize();
 		if (mDisplayOrientation == 0 || mDisplayOrientation == 180)
 		{
@@ -158,7 +163,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 			int iImageHeight = imageSize.getHeight();
 
 			thumbnails.clear();
-			int heightPixels = MainScreen.getAppResources().getDisplayMetrics().heightPixels;
+			int heightPixels = ApplicationScreen.getAppResources().getDisplayMetrics().heightPixels;
 			for (int i = 1; i <= imagesAmount; i++)
 			{
 				thumbnails
@@ -168,7 +173,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 								false));
 			}
 
-			Display display = ((WindowManager) MainScreen.getInstance().getSystemService(Context.WINDOW_SERVICE))
+			Display display = ((WindowManager) ApplicationScreen.instance.getSystemService(Context.WINDOW_SERVICE))
 					.getDefaultDisplay();
 			Point dis = new Point();
 			display.getSize(dis);
@@ -258,7 +263,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 
 	public void onStartPostProcessing()
 	{
-		LayoutInflater inflator = MainScreen.getInstance().getLayoutInflater();
+		LayoutInflater inflator = ApplicationScreen.instance.getLayoutInflater();
 		postProcessingView = inflator.inflate(R.layout.plugin_processing_sequence_postprocessing, null, false);
 
 		mImgView = ((ImageView) postProcessingView.findViewById(R.id.sequenceImageHolder));
@@ -282,7 +287,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 			Bitmap rotated = Bitmap.createBitmap(PreviewBmp, 0, 0, PreviewBmp.getWidth(), PreviewBmp.getHeight(),
 					matrix, true);
 			mImgView.setImageBitmap(rotated);
-			mImgView.setRotation(CameraController.isFrontCamera() ? ((mDisplayOrientation == 0 || mDisplayOrientation == 180) ? 0
+			mImgView.setRotation(mCameraMirrored ? ((mDisplayOrientation == 0 || mDisplayOrientation == 180) ? 0
 					: 180)
 					: 0);
 		}
@@ -293,7 +298,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 		{
 			Bitmap bmp = thumbnails.get(i);
 			Matrix matrix = new Matrix();
-			matrix.postRotate(CameraController.isFrontCamera() ? ((mDisplayOrientation == 0 || mDisplayOrientation == 180) ? 270
+			matrix.postRotate(mCameraMirrored ? ((mDisplayOrientation == 0 || mDisplayOrientation == 180) ? 270
 					: 90)
 					: 90);
 			Bitmap rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
@@ -304,14 +309,14 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 		lp.height = thumbnailsArray[0].getHeight();
 		sequenceView.setLayoutParams(lp);
 
-		sequenceView.setRotation(CameraController.isFrontCamera() ? 180 : 0);
+		sequenceView.setRotation(mCameraMirrored? 180 : 0);
 
 		mHandler.sendEmptyMessage(MSG_END_OF_LOADING);
 	}
 
 	public void getDisplaySize(byte[] data)
 	{
-		Display display = ((WindowManager) MainScreen.getInstance().getSystemService(Context.WINDOW_SERVICE))
+		Display display = ((WindowManager) ApplicationScreen.instance.getSystemService(Context.WINDOW_SERVICE))
 				.getDefaultDisplay();
 		BitmapFactory.Options options = new BitmapFactory.Options();
 		options.inPreferredConfig = Config.ARGB_8888;
@@ -338,15 +343,15 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 	public void setupSaveButton()
 	{
 		// put save button on screen
-		mSaveButton = new Button(MainScreen.getInstance());
+		mSaveButton = new Button(ApplicationScreen.instance);
 		mSaveButton.setBackgroundResource(R.drawable.button_save_background);
 		mSaveButton.setOnClickListener(this);
 		LayoutParams saveLayoutParams = new LayoutParams(
-				(int) (MainScreen.getMainContext().getResources().getDimension(R.dimen.postprocessing_savebutton_size)),
-				(int) (MainScreen.getMainContext().getResources().getDimension(R.dimen.postprocessing_savebutton_size)));
+				(int) (ApplicationScreen.getMainContext().getResources().getDimension(R.dimen.postprocessing_savebutton_size)),
+				(int) (ApplicationScreen.getMainContext().getResources().getDimension(R.dimen.postprocessing_savebutton_size)));
 		saveLayoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
 		saveLayoutParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-		float density = MainScreen.getAppResources().getDisplayMetrics().density;
+		float density = ApplicationScreen.getAppResources().getDisplayMetrics().density;
 		saveLayoutParams.setMargins((int) (density * 8), (int) (density * 8), 0, 0);
 		((RelativeLayout) postProcessingView.findViewById(R.id.sequenceLayout)).addView(mSaveButton, saveLayoutParams);
 		mSaveButton.setRotation(mLayoutOrientationCurrent);
@@ -371,7 +376,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 			if (finishing)
 				return;
 			finishing = true;
-			savePicture(MainScreen.getMainContext());
+			savePicture(ApplicationScreen.getMainContext());
 
 			mHandler.sendEmptyMessage(MSG_LEAVING);
 		}
@@ -387,8 +392,9 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 		PluginManager.getInstance().addToSharedMem("resultframe1" + sessionID, String.valueOf(frame));
 		PluginManager.getInstance().addToSharedMem("resultframelen1" + sessionID, String.valueOf(frame_len));
 
+		//Nexus 6 has a original front camera sensor orientation, we have to manage it
 		PluginManager.getInstance().addToSharedMem("resultframeorientation1" + sessionID,
-				String.valueOf(mDisplayOrientation));
+				String.valueOf((Build.MODEL.contains("Nexus 6") && mCameraMirrored)? (mDisplayOrientation + 180) % 360 : mDisplayOrientation));
 		PluginManager.getInstance().addToSharedMem("resultframemirrored1" + sessionID, String.valueOf(mCameraMirrored));
 
 		PluginManager.getInstance().addToSharedMem("amountofresultframes" + sessionID, String.valueOf(1));
@@ -407,12 +413,12 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 			postProcessingRun = true;
 			break;
 		case MSG_LEAVING:
-			MainScreen.getMessageHandler().sendEmptyMessage(PluginManager.MSG_POSTPROCESSING_FINISHED);
+			ApplicationScreen.getMessageHandler().sendEmptyMessage(ApplicationInterface.MSG_POSTPROCESSING_FINISHED);
 
-			PluginManager.getInstance().sendMessage(PluginManager.MSG_BROADCAST, 
-					PluginManager.MSG_CONTROL_UNLOCKED);
+			PluginManager.getInstance().sendMessage(ApplicationInterface.MSG_BROADCAST, 
+					ApplicationInterface.MSG_CONTROL_UNLOCKED);
 
-			MainScreen.getGUIManager().lockControls = false;
+			ApplicationScreen.getGUIManager().lockControls = false;
 
 			postProcessingRun = false;
 			return false;
@@ -446,7 +452,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 	public boolean onKeyDown(int keyCode, KeyEvent event)
 	{
 		if (keyCode == KeyEvent.KEYCODE_BACK
-				&& MainScreen.getInstance().findViewById(R.id.postprocessingLayout).getVisibility() == View.VISIBLE)
+				&& ApplicationScreen.instance.findViewById(R.id.postprocessingLayout).getVisibility() == View.VISIBLE)
 		{
 			if (finishing)
 				return true;
@@ -510,7 +516,7 @@ public class SequenceProcessingPlugin implements Handler.Callback, OnClickListen
 		 ToDo: either delete (more likely), or add these controls as advanced
 		 
 		// Get the xml/preferences.xml preferences
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getInstance()
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationScreen.instance
 				.getBaseContext());
 		mSensitivity = prefs.getInt("Sensitivity", 22); // 19);
 		mMinSize = prefs.getInt("MinSize", 1000);

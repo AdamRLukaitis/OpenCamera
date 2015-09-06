@@ -20,15 +20,13 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.preference.PreferenceManager;
-import android.util.Log;
-
-import com.almalence.opencam.ui.SelfTimerAndPhotoTimeLapse;
-//<!-- -+-
-//-+- -->
 
 /* <!-- +++
- import com.almalence.opencam_plus.ui.SelfTimerAndPhotoTimeLapse;
- +++ --> */
+import com.almalence.opencam_plus.cameracontroller.CameraController;
++++ --> */
+//<!-- -+-
+import com.almalence.opencam.cameracontroller.CameraController;
+//-+- -->
 
 public class AlarmReceiver extends BroadcastReceiver
 {
@@ -51,7 +49,7 @@ public class AlarmReceiver extends BroadcastReceiver
 			thiz = new AlarmReceiver();
 			if (wakeLock == null)
 			{
-				PowerManager pm = (PowerManager) MainScreen.getInstance().getApplicationContext()
+				PowerManager pm = (PowerManager) ApplicationScreen.instance.getApplicationContext()
 						.getSystemService(Context.POWER_SERVICE);
 				wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP
 						| PowerManager.ON_AFTER_RELEASE, TAG);
@@ -65,8 +63,7 @@ public class AlarmReceiver extends BroadcastReceiver
 	{
 		if (wakeLock == null)
 		{
-			PowerManager pm = (PowerManager) MainScreen.getInstance().getApplicationContext()
-					.getSystemService(Context.POWER_SERVICE);
+			PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
 			wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP
 					| PowerManager.ON_AFTER_RELEASE, TAG);
 		}
@@ -79,12 +76,15 @@ public class AlarmReceiver extends BroadcastReceiver
 
 		try
 		{
-			if (MainScreen.getCameraController().getCamera() == null)
+			if (ApplicationScreen.instance == null || ApplicationScreen.getCameraController() == null || (CameraController.getCamera() == null && CameraController.getCamera2() == null))
 			{
 				Intent dialogIntent = new Intent(context, MainScreen.class);
-				dialogIntent.addFlags(Intent.FLAG_FROM_BACKGROUND | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+				dialogIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
 						| Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 				context.startActivity(dialogIntent);
+				if (wakeLock != null)
+					if (wakeLock.isHeld())
+						wakeLock.release();
 
 			} else
 			{
@@ -102,7 +102,7 @@ public class AlarmReceiver extends BroadcastReceiver
 			return;
 		}
 
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationScreen.getMainContext());
 
 		boolean photoTimeLapseActive = prefs.getBoolean(MainScreen.sPhotoTimeLapseActivePref, false);
 		boolean photoTimeLapseIsRunning = prefs.getBoolean(MainScreen.sPhotoTimeLapseIsRunningPref, false);
@@ -119,28 +119,31 @@ public class AlarmReceiver extends BroadcastReceiver
 
 	public void setNextAlarm(Context context)
 	{
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainScreen.getMainContext());
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ApplicationScreen.getMainContext());
 
-		pauseBetweenShotsVal = prefs.getInt(MainScreen.sPhotoTimeLapseCaptureIntervalPref, -1);
-		if (pauseBetweenShotsVal == -1)
+		pauseBetweenShotsVal = prefs.getInt(MainScreen.sPhotoTimeLapseCaptureIntervalPref, 5);
+		if (pauseBetweenShotsVal == 0)
 		{
 			return;
 		}
 
-		pauseBetweenShots = Long.parseLong(SelfTimerAndPhotoTimeLapse.stringTimelapseInterval[pauseBetweenShotsVal]);
+		pauseBetweenShots = pauseBetweenShotsVal;
 
 		pauseBetweenShotsMeasurment = prefs.getInt(MainScreen.sPhotoTimeLapseCaptureIntervalMeasurmentPref, 0);
 
 		switch (pauseBetweenShotsMeasurment)
 		{
-		case 0:
+		case 0://secs
 			pauseBetweenShots = pauseBetweenShots * 1000;
 			break;
-		case 1:
+		case 1://mins
 			pauseBetweenShots = pauseBetweenShots * 60000;
 			break;
-		case 2:
+		case 2://hours
 			pauseBetweenShots = pauseBetweenShots * 60000 * 60;
+			break;
+		case 3://days
+			pauseBetweenShots = pauseBetweenShots * 60000 * 60 * 24;
 			break;
 		default:
 			break;
@@ -157,8 +160,9 @@ public class AlarmReceiver extends BroadcastReceiver
 		pm.setComponentEnabledSetting(receiver, PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
 				PackageManager.DONT_KILL_APP);
 
-		if (wakeLock.isHeld())
-			wakeLock.release();
+		if (wakeLock != null)
+			if (wakeLock.isHeld())
+				wakeLock.release();
 	}
 
 	@SuppressLint("NewApi")
@@ -184,7 +188,8 @@ public class AlarmReceiver extends BroadcastReceiver
 			alarmMgr.cancel(alarmIntent);
 		}
 
-		if (wakeLock.isHeld())
-			wakeLock.release();
+		if (wakeLock != null)
+			if (wakeLock.isHeld())
+				wakeLock.release();
 	}
 }
